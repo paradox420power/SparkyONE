@@ -26,14 +26,109 @@ function getChar(myString){
     return nextChar;
 }
 
-function isNumeric(variable){
+function isNumeric(input){
     var isNumeric = true;
     var numbers = /^[0-9]+$/;
-    for(var x = 0; x < variable.length; x++){
-        if(!(variable.charAt(x).match(numbers)))
-            isNumeric = false;
+    var incomplete = true;
+    var charCheck = "";
+    var charCheckIndex = 0;
+    while(incomplete){
+        if(charCheckIndex < input.length){ //still have input to read
+            charCheck = input.charAt(charCheckIndex);
+            if(charCheck.match(numbers)){ //still a valid numeric input
+                charCheckIndex++;
+            }else if(charCheck === "."){ //ensure not a floating point numeric
+                charCheckIndex++;//move to next char
+                while(incomplete){
+                    if(charCheckIndex < input.length){
+                        charCheck = input.charAt(charCheckIndex);
+                        if(charCheck.match(numbers))
+                            charCheckIndex++;
+                        else{
+                            if(keySymbol.includes(charCheck)){ //checks if next character is an acceptable follow to the varaible
+                                incomplete = false; //we hit the next space
+                                charCheckIndex--; //unget that last index since it is next in sequence
+                            }else{ //not followed by key Symbol, which makes it not a number
+                                isNumeric = false;
+                                incomplete = false;
+                            }
+                        }
+                    }
+                }
+            }else{
+                if(keySymbol.includes(charCheck)){ //checks if next character is an acceptable follow to the varaible
+                    incomplete = false; //we hit the next space
+                    charCheckIndex--; //unget that last index since it is next in sequence
+                }else{ //not followed by key Symbol, which makes it not a number
+                    isNumeric = false;
+                    incomplete = false;
+                }
+            }
+        }else{ //end of input
+            incomplete = false;
+            charCheckIndex--;
+        }
     }
+    
     return isNumeric;
+}
+
+function readNumber(input){
+    var lexeme = {
+        id:"", //the exact input from the string
+        type:"NUMBER", //what the token is classified as
+        line_no: code_line, //what line of code the token is on
+        length: 0 //used to remove the lexeme including preceding spaces from input string upon return
+    };
+    
+    var numbers = /^[0-9]+$/;
+    var incomplete = true;
+    var charCheck = "";
+    var charCheckIndex = 0;
+    while(incomplete){
+        if(charCheckIndex < input.length){ //still have input to read
+            charCheck = input.charAt(charCheckIndex);
+            if(charCheck.match(numbers)){ //still a valid numeric input
+                lexeme.id += charCheck;
+                charCheckIndex++;
+            }else if(charCheck === "."){ //ensure not a floating point numeric
+                lexeme.id += charCheck; //add "." to name
+                lexeme.type = "FLOAT"; //update type
+                charCheckIndex++;//move to next char
+                while(incomplete){
+                    if(charCheckIndex < input.length){
+                        charCheck = input.charAt(charCheckIndex);
+                        if(charCheck.match(numbers)){
+                            lexeme.id += charCheck;
+                            charCheckIndex++;
+                        }else{
+                            if(keySymbol.includes(charCheck) && charCheck !== "."){ //checks if next character is an acceptable follow to the varaible, cannot be "." bacuse that could mean 3.1.5 as a float, period, number
+                                incomplete = false; //we hit the next space
+                                charCheckIndex--; //unget that last index since it is next in sequence
+                            }else{ //not followed by key Symbol, which makes it not a number
+                                lexeme.id = "Error";
+                                lexeme.type = "Error";
+                                incomplete = false;
+                            }
+                        }
+                    }
+                }
+            }else{
+                if(keySymbol.includes(charCheck)){ //checks if next character is an acceptable follow to the varaible
+                    incomplete = false; //we hit the next space
+                    charCheckIndex--; //unget that last index since it is next in sequence
+                }else{ //not followed by key Symbol, which makes it not a number
+                    incomplete = false;
+                }
+            }
+        }else{ //end of input
+            incomplete = false;
+            charCheckIndex--;
+        }
+    }
+    lexeme.length = charCheckIndex + 1; //since charIndex started at 0, the returned length of the variable is the +1
+    
+    return lexeme;
 }
 
 //reads an input to ensure it matches python naming conventions & then checks if input is a reserve word
@@ -77,9 +172,6 @@ function readWord(input){
         if(reservedWord[x] === lexeme.id)
             lexeme.type = reservedWord[x].toUpperCase();
     }
-    
-    if(isNumeric(lexeme.id)) //checks if all read characters are numbers
-        lexeme.type = "NUMBER"; //if they are, assign number type
     
     return lexeme;
 }
@@ -263,7 +355,15 @@ function getToken(input){
                 break;
             default:
                 if(!(keySymbol.includes(input.charAt(0)))){
-                    lexeme = readWord(input);
+                    var numbers = /^[0-9]+$/;
+                    if(input.charAt(0).match(numbers)){
+                        if(isNumeric(input)){
+                            lexeme = readNumber(input);
+                        }else{
+                            lexeme = readWord(input);
+                        }
+                    }else
+                        lexeme = readWord(input);
                 }else{
                     lexeme.id = "error";
                     lexeme.type = "unchecked symbol";
