@@ -220,7 +220,7 @@ function getToken(input){
                     lexeme.length++;
                 }else{
                     lexeme.id = "-";
-                    lexeme.type = "PLUS";
+                    lexeme.type = "MINUS";
                 }
                 break;
             case "*":
