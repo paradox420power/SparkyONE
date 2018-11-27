@@ -133,7 +133,7 @@ function readNumber(input){
 
 //reads an input to ensure it matches python naming conventions & then checks if input is a reserve word
 function readWord(input){
-     var lexeme = {
+    var lexeme = {
         id:"", //the exact input from the string
         type:"ID", //what the token is classified as
         line_no: code_line, //what line of code the token is on
@@ -176,6 +176,47 @@ function readWord(input){
     return lexeme;
 }
 
+function readString(input){
+    var lexeme = {
+        id:"\"", //the exact input from the string
+        type:"QUOTE", //what the token is classified as
+        line_no: code_line, //what line of code the token is on
+        length: 1 //used to remove the lexeme including preceding spaces from input string upon return
+    };
+    
+    var charCheck = "";
+    var charCheckIndex = 1;
+    var valid_printables = /^[\s*\w*]$/; // "/.*\n*/" will need to be implemented eventually
+    var incomplete = true;
+    
+    while(incomplete){ //will continue to loop while the string is unfinished
+        if(charCheckIndex < input.length){
+            charCheck = input.charAt(charCheckIndex);
+            if(charCheck.match(valid_printables)){
+                lexeme.id += charCheck;
+                charCheckIndex++; //increment to next char index
+            }else{
+                if(charCheck === "\""){ //checks if next character is an acceptable follow to the varaible
+                    incomplete = false; //we hit the next space
+                    lexeme.id += "\""; //unget that last index since it is next in sequence
+                    lexeme.type = "STRING";
+                }else{
+                    lexeme.id = "Error";
+                    lexeme.type = "Error";
+                    incomplete = false;
+                }
+            }
+        }else{
+            incomplete = false;
+            charCheckIndex--;
+        }
+
+        lexeme.length = charCheckIndex + 1; //since charIndex started at 1, the returned length of the variable is the +1
+    }
+    
+    return lexeme;
+}
+
 /*calling getToken reads character by character against valid inputs & will return the exact input
  * as lexeme.id, the token type as lexeme.type, what line it was encountered on as lexeme.line_no,
  * and the length of the input which will be should be removed from the input after return (i.e. call input.slice(length))
@@ -191,7 +232,7 @@ function getToken(input){
     /*["=", "+", "-", "*", "/", "%", "<", ">", ":", ";",
     "(", ")", "[", "]", "{", "}", ",", ".", "\"", "\'", "\\", " ", "\n"];*/
     
-    if(input !== null){
+    if(input !== null && input !== ""){
         switch(input.charAt(0)){
             case "+":
                 lexeme.length++;
@@ -316,9 +357,7 @@ function getToken(input){
                 lexeme.length++;
                 break;
             case "\"":
-                lexeme.id = "\"";
-                lexeme.type = "QUOTE";
-                lexeme.length++;
+                lexeme = readString(input);
                 break;
             case "\'":
                 lexeme.id = "\'";
@@ -359,8 +398,11 @@ function getToken(input){
                     if(input.charAt(0).match(numbers)){
                         if(isNumeric(input)){
                             lexeme = readNumber(input);
+                            
                         }else{
+                            
                             lexeme = readWord(input);
+                            
                         }
                     }else
                         lexeme = readWord(input);
@@ -380,4 +422,20 @@ function getToken(input){
     
     return lexeme;
 };
+
+function ungetToken(input, currToken){
+    var revisedInput = "";
+    if(currToken !== ""){ 
+        if(currToken.id === " "){
+            revisedInput = " ".repeat(currToken.length) + input;
+        }
+        else{
+            revisedInput = currToken.id + input;
+        }
+    }
+    else{
+        revisedInput = input;
+    }
+    return revisedInput;
+}
 
