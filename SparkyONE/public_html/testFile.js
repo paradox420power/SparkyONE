@@ -8,14 +8,11 @@
 
 function main(){
     var input =
-"\
-\n\
-\n\
-\n\
-if    a ==  a:\n\
-FAKE_ASSIGN_STATEMENT\n\
-else true:\n\
-";
+"if a <= assign:  \n\
+    a *= a * a - 7 % True / False\n\
+    a = a += 4 - 5\n\
+else b >= a:\n\
+    b =b         = c = false; a = a==a;";
     var lexeme;
     
     document.write(input + "<br><br>");

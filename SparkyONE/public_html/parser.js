@@ -27,6 +27,15 @@ function peek(){
     return token;
 }
 
+function peek_2_ahead(){ //necessary for a few location is parser
+    skipSpaces();
+    var token = getToken(program);
+    program = program.slice(token.length);
+    var returnToken = peek();
+    program = token.id + " " + program; //return skipped token & arbitrary space skipped by peek
+    return returnToken;
+}
+
  //reads next token, throws an error if they don't match
  // & splices token from input, ignoring spaces
 function expect(tokenType){
@@ -39,7 +48,7 @@ function expect(tokenType){
             readEmptyLines();
             //check correct indents (stack issue)
         }
-        document.write(token.type + " read at line " + token.line_no + "<br>"); //comment this out when not trouble shooting
+        //document.write(token.type + " read at line " + token.line_no + "<br>"); //comment this out when not trouble shooting
     }else{
         program = program.slice(token.length); //unnecessary to slice since an error is thrown
         error_expected_not_matching(tokenType, token.type, token.line_no);
@@ -310,10 +319,63 @@ function parse_while_stmt(){
 function parse_assign_stmt(){
     expect("ID");
     var token = peek();
+    var math_assigns = ["ADD_ASSIGN", "SUB_ASSIGN", "MULT_ASSIGN", "DIV_ASSIGN", "MOD_ASSIGN"];
+    if(math_assigns.includes(token.type)){ //calc & assign statements
+        parse_assign_op();
+        token = peek();
+        parse_expr();
+    }else if(token.type === "ASSIGN_EQUALS"){ // simply assigning, but could be a multi assign statement
+        expect("ASSIGN_EQUALS");
+        token = peek();
+        var token2 = peek_2_ahead();
+        if(token.type === "ID"){
+            if(math_assigns.includes(token2.type) || token2.type === "ASSIGN_EQUALS" ||
+                    token2.type === "END_OF_LINE" || token2.type === "SEMICOLON"){ //2nd tokens indicative of an assign stmt
+                parse_assign_stmt();
+            }else //else an id should be a primary/expression
+                parse_expr();
+        }else{
+            switch(token.type){
+                case "NUMBER":
+                case "FLOAT":
+                case "TRUE":
+                case "FALSE": parse_expr();
+                    break;
+                case "LPAREN": parse_tuple();
+                    break;
+                case "LBRACE": parse_list();
+                    break;
+                //case String TODO
+                default: syntax_error();
+                    break;
+            }
+        }
+    }else if(token.type === "END_OF_LINE" || token.type === "SEMICOLON"){ //end of assign stmt recursion expected
+        //do nothing
+    }else
+        syntax_error();
 }
 
 function parse_assign_op(){
-    
+    var token = peek();
+    var op_assigns = ["ADD_ASSIGN", "SUB_ASSIGN", "MULT_ASSIGN", "DIV_ASSIGN", "MOD_ASSIGN"];
+    if(op_assigns.includes(token.type)){
+        switch(token.type){
+            case "ADD_ASSIGN": expect("ADD_ASSIGN");
+                break;
+            case "SUB_ASSIGN": expect("SUB_ASSIGN");
+                break;
+            case "MULT_ASSIGN": expect("MULT_ASSIGN");
+                break;
+            case "DIV_ASSIGN": expect("DIV_ASSIGN");
+                break;
+            case "MOD_ASSIGN": expect("MOD_ASSIGN");
+                break;
+            default: syntax_error();
+                break;
+        }
+    }else
+            syntax_error();
 }
 
 function parse_primary(){
@@ -356,11 +418,45 @@ function parse_tuple(){
 }
 
 function parse_expr(){
-    
+    parse_primary();
+    var token = peek();
+    var operations = ["PLUS", "MINUS", "MULT", "DIV", "MOD", "EXPO", "IN", "NOTIN", "IS", "ISNOT"];
+    var compare_ops = ["COMPARE_EQUALS", "NOT_EQUALS", "LESS_THAN", "LESS_THAN_EQUAL", "GREATER_THAN", "GREATER_THAN_EQUAL"];
+    if(operations.includes(token.type)){
+        parse_op();
+        parse_expr();
+    }else if(compare_ops.includes(token.type)){
+        parse_comparison_operator();
+        parse_expr();
+    }//else do nothing
 }
 
 function parse_op(){
-    
+    var token = peek();
+    switch(token.type){
+        case "PLUS": expect("PLUS");
+            break;
+        case "MINUS": expect("MINUS");
+            break;
+        case "MULT": expect("MULT");
+            break;
+        case "DIV": expect("DIV");
+            break;
+        case "MOD": expect("MOD");
+            break;
+        case "EXPO": expect("EXPO");
+            break;
+        case "IN": expect("IN");
+            break;
+        case "NOTIN": expect("NOTIN");
+            break;
+        case "IS": expect("IS");
+            break;
+        case "ISNOT": expect("ISNOT");
+            break;
+        default: syntax_error();
+            break;
+    }
 }
 
 function parse_print_stmt(){

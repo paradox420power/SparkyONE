@@ -188,7 +188,7 @@ function getToken(input){
         length: 0 //used to remove the lexeme including preceding spaces from input string upon return
     };
     
-    /*["=", "+", "-", "*", "/", "%", "<", ">", ":", ";",
+    /*["=", "+", "-", "*", "/", "%", "^", "<", ">", ":", ";",
     "(", ")", "[", "]", "{", "}", ",", ".", "\"", "\'", "\\", " ", "\n"];*/
     
     if(input !== null || input !== ""){
@@ -216,26 +216,49 @@ function getToken(input){
                     lexeme.length++;
                 }else if(input.charAt(1) === "="){
                     lexeme.id = "-=";
-                    lexeme.type = "SUBTRACT_ASSIGN";
+                    lexeme.type = "SUB_ASSIGN";
                     lexeme.length++;
                 }else{
                     lexeme.id = "-";
-                    lexeme.type = "PLUS";
+                    lexeme.type = "MINUS";
                 }
                 break;
             case "*":
-                lexeme.id = "*";
-                lexeme.type = "MULTIPLY";
                 lexeme.length++;
+                if(input.charAt(1) === "="){
+                    lexeme.length++;
+                    lexeme.id = "*=";
+                    lexeme.type = "MULT_ASSIGN";
+                }else{
+                    lexeme.id = "*";
+                    lexeme.type = "MULT";
+                }
                 break;
             case "/":
-                lexeme.id = "/";
-                lexeme.type = "DIVIDE";
                 lexeme.length++;
+                if(input.charAt(1) === "="){
+                    lexeme.length++;
+                    lexeme.id = "/=";
+                    lexeme.type = "DIV_ASSIGN";
+                }else{
+                    lexeme.id = "/";
+                    lexeme.type = "DIV";
+                }
                 break;
             case "%":
-                lexeme.id = "%";
-                lexeme.type = "MODULO";
+                lexeme.length++;
+                if(input.charAt(1) === "="){
+                    lexeme.length++;
+                    lexeme.id = "%=";
+                    lexeme.type = "MOD_ASSIGN";
+                }else{
+                    lexeme.id = "%";
+                    lexeme.type = "MOD";
+                }
+                break;
+            case "^":
+                lexeme.id = "^";
+                lexeme.type = "EXPO";
                 lexeme.length++;
                 break;
             case "<":
