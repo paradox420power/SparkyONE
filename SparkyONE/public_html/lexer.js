@@ -14,8 +14,8 @@ var keySymbol = ["=", "+", "-", "*", "/", "%", "<", ">", ":", ";",
 //python's reserved words that a user shouldn't be able to use out of context
 var reservedWord = ["True", "False", "None", "and", "as", "assert", "break", "class",
     "continue", "def", "del", "elif", "else", "except", "finally", "for", "from",
-"global", " if", "import", "in", "is", "lambda", "nonlocal", "not", "or", "pass", "print",
-"raise", "return", "try", "while", "with", "yield"];
+"global", "if", "import", "in", "is", "lambda", "my_range", "nonlocal", "not", "or", "pass", "print",
+"raise", "range", "return", "try", "while", "with", "xrange", "yield"];
 
 var code_line = 1;
 
@@ -142,7 +142,7 @@ function readWord(input){
     
     var charCheck = "";
     var charCheckIndex = 0;
-    var alphanum = /^[0-9a-zA-Z]+$/; //used to ensure input is alpha numeric
+    var alphanum = /^[0-9a-zA-Z_]+$/; //used to ensure input is alpha numeric
     var incomplete = true;
     while(incomplete){ //will continue to loop while next char is in alphanum
         if(charCheckIndex < input.length){
@@ -191,7 +191,7 @@ function getToken(input){
     /*["=", "+", "-", "*", "/", "%", "<", ">", ":", ";",
     "(", ")", "[", "]", "{", "}", ",", ".", "\"", "\'", "\\", " ", "\n"];*/
     
-    if(input !== null){
+    if(input !== null || input !== ""){
         switch(input.charAt(0)){
             case "+":
                 lexeme.length++;
@@ -220,7 +220,7 @@ function getToken(input){
                     lexeme.length++;
                 }else{
                     lexeme.id = "-";
-                    lexeme.type = "MINUS";
+                    lexeme.type = "PLUS";
                 }
                 break;
             case "*":
@@ -351,7 +351,6 @@ function getToken(input){
                 lexeme.id = "line_break";
                 lexeme.type = "END_OF_LINE";
                 lexeme.length++;
-                code_line++;
                 break;
             default:
                 if(!(keySymbol.includes(input.charAt(0)))){
@@ -362,8 +361,12 @@ function getToken(input){
                         }else{
                             lexeme = readWord(input);
                         }
-                    }else
+                    }else if(input !== ""){
                         lexeme = readWord(input);
+                    }else{
+                        lexeme.id = "end";
+                        lexeme.type = "END_OF_FILE";
+                    }
                 }else{
                     lexeme.id = "error";
                     lexeme.type = "unchecked symbol";
@@ -379,5 +382,16 @@ function getToken(input){
     }
     
     return lexeme;
-};
+}
+
+function ungetToken(input, token){
+    return token.id + "" + input;
+}
+
+function incrementCodeLine(){
+    code_line++;
+}
+function decrementCodeLine(){
+    code_line--;
+}
 
