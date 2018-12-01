@@ -14,8 +14,8 @@ var keySymbol = ["=", "+", "-", "*", "/", "%", "<", ">", ":", ";",
 //python's reserved words that a user shouldn't be able to use out of context
 var reservedWord = ["True", "False", "None", "and", "as", "assert", "break", "class",
     "continue", "def", "del", "elif", "else", "except", "finally", "for", "from",
-"global", " if", "import", "in", "is", "lambda", "nonlocal", "not", "or", "pass", "print",
-"raise", "return", "try", "while", "with", "yield"];
+"global", "if", "import", "in", "is", "lambda", "my_range", "nonlocal", "not", "or", "pass", "print",
+"raise", "range", "return", "try", "while", "with", "xrange", "yield"];
 
 var code_line = 1;
 
@@ -39,7 +39,6 @@ function isNumeric(input){
                 charCheckIndex++;
             }else if(charCheck === "."){ //ensure not a floating point numeric
                 charCheckIndex++;//move to next char
-                
                 while(incomplete){
                     if(charCheckIndex < input.length){
                         charCheck = input.charAt(charCheckIndex);
@@ -54,11 +53,7 @@ function isNumeric(input){
                                 incomplete = false;
                             }
                         }
-                    }else{ //end of input
-                        incomplete = false;
-                        charCheckIndex--;
                     }
-                    
                 }
             }else{
                 if(keySymbol.includes(charCheck)){ //checks if next character is an acceptable follow to the varaible
@@ -116,9 +111,6 @@ function readNumber(input){
                                 incomplete = false;
                             }
                         }
-                    }else{ //end of input
-                        incomplete = false;
-                        charCheckIndex--;
                     }
                 }
             }else{
@@ -141,7 +133,7 @@ function readNumber(input){
 
 //reads an input to ensure it matches python naming conventions & then checks if input is a reserve word
 function readWord(input){
-    var lexeme = {
+     var lexeme = {
         id:"", //the exact input from the string
         type:"ID", //what the token is classified as
         line_no: code_line, //what line of code the token is on
@@ -237,10 +229,10 @@ function getToken(input){
         length: 0 //used to remove the lexeme including preceding spaces from input string upon return
     };
     
-    /*["=", "+", "-", "*", "/", "%", "<", ">", ":", ";",
+    /*["=", "+", "-", "*", "/", "%", "^", "<", ">", ":", ";",
     "(", ")", "[", "]", "{", "}", ",", ".", "\"", "\'", "\\", " ", "\n"];*/
     
-    if(input !== null && input !== ""){
+    if(input !== null || input !== ""){
         switch(input.charAt(0)){
             case "+":
                 lexeme.length++;
@@ -265,7 +257,7 @@ function getToken(input){
                     lexeme.length++;
                 }else if(input.charAt(1) === "="){
                     lexeme.id = "-=";
-                    lexeme.type = "SUBTRACT_ASSIGN";
+                    lexeme.type = "SUB_ASSIGN";
                     lexeme.length++;
                 }else{
                     lexeme.id = "-";
@@ -273,27 +265,46 @@ function getToken(input){
                 }
                 break;
             case "*":
-                lexeme.id = "*";
-                lexeme.type = "MULTIPLY";
                 lexeme.length++;
+                if(input.charAt(1) === "="){
+                    lexeme.length++;
+                    lexeme.id = "*=";
+                    lexeme.type = "MULT_ASSIGN";
+                }else{
+                    lexeme.id = "*";
+                    lexeme.type = "MULT";
+                }
                 break;
             case "/":
-                lexeme.id = "/";
-                lexeme.type = "DIVIDE";
                 lexeme.length++;
+                if(input.charAt(1) === "="){
+                    lexeme.length++;
+                    lexeme.id = "/=";
+                    lexeme.type = "DIV_ASSIGN";
+                }else{
+                    lexeme.id = "/";
+                    lexeme.type = "DIV";
+                }
                 break;
             case "%":
-                lexeme.id = "%";
-                lexeme.type = "MODULO";
+                lexeme.length++;
+                if(input.charAt(1) === "="){
+                    lexeme.length++;
+                    lexeme.id = "%=";
+                    lexeme.type = "MOD_ASSIGN";
+                }else{
+                    lexeme.id = "%";
+                    lexeme.type = "MOD";
+                }
+                break;
+            case "^":
+                lexeme.id = "^";
+                lexeme.type = "EXPO";
                 lexeme.length++;
                 break;
             case "<":
                 lexeme.length++;
-                if(input.charAt(1) === ">"){
-                    lexeme.id = "<>";
-                    lexeme.type = "NOT_EQUAL";
-                    lexeme.length++;
-                }else if(input.charAt(1) === "="){
+                if(input.charAt(1) === "="){
                     lexeme.id = "<=";
                     lexeme.type = "LESS_THAN_EQUAL";
                     lexeme.length++;
@@ -325,16 +336,16 @@ function getToken(input){
                 }
                 break;
             case "!":
-                lexeme.length++;
-                if(input.charAt(1) === "="){
-                    lexeme.id = "!=";
-                    lexeme.type = "NOT_EQUAL"; //May want to get rid of <> case altogether as its deprecated
                     lexeme.length++;
-                }else{
-                    lexeme.id = "error";
-                    lexeme.type = "unchecked symbol";
-                    lexeme.length++;
-                }
+                    if(input.charAt(1) === "="){
+                        lexeme.id = "!=";
+                        lexeme.type = "NOT_EQUAL"; //May want to get rid of <> case altogether as its deprecated
+                        lexeme.length++;
+                    }else{
+                        lexeme.id = "error";
+                        lexeme.type = "unchecked symbol";
+                        lexeme.length++;
+                    }
                 break;
             case ":":
                 lexeme.id = ":";
@@ -410,23 +421,22 @@ function getToken(input){
                 lexeme.id = "line_break";
                 lexeme.type = "END_OF_LINE";
                 lexeme.length++;
-                code_line++;
                 break;
             default:
                 if(!(keySymbol.includes(input.charAt(0)))){
                     var numbers = /^[0-9]+$/;
                     if(input.charAt(0).match(numbers)){
                         if(isNumeric(input)){
-                            
                             lexeme = readNumber(input);
-                            
                         }else{
-                            
                             lexeme = readWord(input);
-                            
                         }
-                    }else
+                    }else if(input !== ""){
                         lexeme = readWord(input);
+                    }else{
+                        lexeme.id = "end";
+                        lexeme.type = "END_OF_FILE";
+                    }
                 }else{
                     lexeme.id = "error";
                     lexeme.type = "unchecked symbol";
@@ -442,21 +452,16 @@ function getToken(input){
     }
     
     return lexeme;
-};
+}
 
-function ungetToken(input, currToken){
-    var revisedInput = "";
-    if(currToken !== ""){ 
-        if(currToken.id === " "){
-            revisedInput = " ".repeat(currToken.length) + input;
-        }
-        else{
-            revisedInput = currToken.id + input;
-        }
-    }
-    else{
-        revisedInput = input;
-    }
-    return revisedInput;
+function ungetToken(input, token){
+    return token.id + "" + input;
+}
+
+function incrementCodeLine(){
+    code_line++;
+}
+function decrementCodeLine(){
+    code_line--;
 }
 

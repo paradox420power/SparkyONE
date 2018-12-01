@@ -7,26 +7,25 @@
 
 
 function main(){
-    var input = "a=5;a=6+9;a=7;\nb=5     \nc += 89 + 45.85";
-    /*var input1 = ""
-    var lexeme = getToken(input1);
+    var input =
+"\
+\n\
+\n\
+if a <= assign:  \n\
+    a *= a * a - 7 % True / False\n\
+    a = a += 4 - 5\n\
+else b != a:\n\
+    b =b         = c = false; a = a==a;";
+    var lexeme;
     
-    //document.write(input + "<br><br>");
-    //document.write("ID: " + lexeme.id + ", Type: " + lexeme.type + ", Length: " + lexeme.length + ", Line: " + lexeme.line_no + "<br><br>");
+    document.write(input + "<br><br>");
     
-    while(input1.length > 0){
-        lexeme = getToken(input1);
-        input1 = input1.slice(lexeme.length);
-        document.write("ID: " + lexeme.id + ", Type: " + lexeme.type + ", Length: " + lexeme.length + ", Line: " + lexeme.line_no + "<br><br>");
-    }
+    parse_begin_program(input);
     
-    if(input1.length === 0){
-        lexeme = getToken(input1);
-        input1 = input1.slice(lexeme.length);
+    /*while(input.length > 0){
+        lexeme = getToken(input);
+        input = input.slice(lexeme.length);
         document.write("ID: " + lexeme.id + ", Type: " + lexeme.type + ", Length: " + lexeme.length + ", Line: " + lexeme.line_no + "<br><br>");
     }*/
-    
-    parse_program(input);
-    
     document.write("END_OF_FILE");
 }

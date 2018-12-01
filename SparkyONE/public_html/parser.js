@@ -1,886 +1,512 @@
-/* 
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 
-var indents = new Stack();
+var bgnTokens = ["IMPORT", "IF", "FOR", "WHILE", "ID", "PRINT"];
+var program = "";
 
-//For whatever reason, bgnStmtWord as a global won't work??
-//var bgnStmtWord = ["IMPORT", "IF", "FOR", "WHILE", "ID", "PRINT"];
-//var input = "for   ():\n    a=5";
+//print parsing error
+function error_expected_not_matching(expected, received, line_no){
+    document.write("Expected Token: " + expected + "<br>Received Token: " + received + "<br>At line " + line_no + "<br>");
+}
 
-function checkSpace(input){
-    var token = getToken(input);
-    
+function syntax_error(){
+    document.write("Unspecified Syntax Error<br>");
+}
+
+//used to remove unwanted spaces
+function skipSpaces(){
+    var token = getToken(program);
     if(token.type === "SPACE"){
-        return token;
+        program = program.slice(token.length);
     }
-    else{
-        return "";
-    }
-    
+    //else do nothing
 }
 
-function ignoreSpace(input){
-    var token = getToken(input);
-    
+//reads & returns next token, ignoring spaces
+function peek(){
+    skipSpaces();
+    var token = getToken(program);
+    return token;
+}
+
+function peek_2_ahead(){ //necessary for a few location is parser
+    skipSpaces();
+    var token = getToken(program);
+    program = program.slice(token.length);
+    var returnToken = peek();
+    program = token.id + " " + program; //return skipped token & arbitrary space skipped by peek
+    return returnToken;
+}
+
+ //reads next token, throws an error if they don't match
+ // & splices token from input, ignoring spaces
+function expect(tokenType){
+    skipSpaces();
+    var token = getToken(program);
+    if(token.type === tokenType){
+        program = program.slice(token.length);
+        if(token.type === "END_OF_LINE"){
+            incrementCodeLine();
+            readEmptyLines();
+            //check correct indents (stack issue)
+        }
+        //document.write(token.type + " read at line " + token.line_no + "<br>"); //comment this out when not trouble shooting
+    }else{
+        program = program.slice(token.length); //unnecessary to slice since an error is thrown
+        error_expected_not_matching(tokenType, token.type, token.line_no);
+    }
+    //document.write(program + "<br><br>");
+    return token;
+}
+
+//read empty lines, will recursively call, reads until next input
+function readEmptyLines(){
+    var token = getToken(program);
+    var token2;
     if(token.type === "SPACE"){
-        var revisedInput = input.slice(token.length);
-        return revisedInput;
-    }
-    else{
-        return input;
-    }
-}
-
-/*
- * Used to evaluate lines that only have whitespace characters.
- * 
- */
-function parse_empty_lines(input){
-    var token1 = getToken(input);
-    
-    if(token1.type === "SPACE"){
-        var revisedInput = ignoreSpace(input);  //Ignore the spaces that occured at the beginning of this line
-        var token2 = getToken(revisedInput);
-        
-        if(token2.type === "END_OF_LINE"){                    //If the revised input has a newline after those spaces, check to see if there are more empty lines
-            revisedInput = revisedInput.slice(token2.length); //Get rid of the newline character from the input that still needs to be parsed
-            return parse_empty_lines(revisedInput);
-        }
-        else{
-            return input; //return the original input if spaces were read, but there was no newline after them
-        }
-    }
-    else if(token1.type === "END_OF_LINE"){
-        var revisedInput = input.slice(token1.length);
-        return parse_empty_lines(revisedInput);
-    }
-    else{
-        return input;
+        program = program.slice(token.length); //slice off the spaces
+        token2 = getToken(program);
+        if(token2.type === "END_OF_LINE") //if next is line break, its ok
+            readEmptyLines();
+        else //some keyword was read & the spaces could be indent that need to be read
+            program = token.id + "" + program; //add spliced id back to front of program
+    }else if(token.type === "END_OF_LINE"){
+        program = program.slice(token.length);
+        incrementCodeLine();
+        readEmptyLines();
     }
 }
 
-function parse_program(input){
-    var bgnStmtWord = ["IMPORT", "IF", "FOR", "WHILE", "ID", "PRINT"];
-    var revisedInput = parse_empty_lines(input);
-    var token1 = getToken(revisedInput);
+function parse_begin_program(input){
+    program = input;
+    var token = peek();
+    if(token.type === "END_OF_LINE")
+        expect("END_OF_LINE"); //this will precede to read all empty lines
+    token = peek();
+    if(bgnTokens.includes(token.type)){
+        if(token.type === "IMPORT")
+            parse_import_list();
+        var token = peek(); //if above if doesn't run this just peeks the same token
+        if(token.type !== "END_OF_FILE")
+            parse_program(); //this will run on any non-empty program
+        expect("END_OF_FILE");
+    }else if(token.type === "END_OF_FILE"){
+        //nothing to parse
+    }else{
+        syntax_error();
+    }
     
-    if(bgnStmtWord.includes(token1.type)){
-        
-        revisedInput = parse_stmt_list(revisedInput, false);
-        revisedInput = parse_empty_lines(revisedInput);
-        revisedInput = ignoreSpace(revisedInput);
-        
-        var token2 = getToken(revisedInput); //Could probably just call getToken in the if statement instead
-                
-        if(token2.type === "END_OF_FILE"){
-            document.write("<br>Success.<br>");
-        }
+}
+
+function parse_import_list(){
+    parse_import_stmt();
+    var token = peek();
+    if(token.type === "IMPORT")
+        parse_import_list();
+}
+
+function parse_import_stmt(){
+    expect("IMPORT");
+    expect("ID");
+    var token = peek();
+    if(token.type !== "END_OF_FILE"){ //some statements are the end of the program & won't have a line break
+        if(token.type === "END_OF_LINE")
+            expect("END_OF_LINE");
         else{
-            document.write("<br>Something may have gone wrong.<br>");
+            expect("SEMICOLON"); //this will throw error if invalid follow-up read
+            token = peek(); //sometimes a semicolon is followed by a line break
+            if(token.type === "END_OF_LINE")
+                expect("END_OF_LINE");
         }
     }
-    else{
+}
+
+function parse_program(){
+    var token = peek();
+    if(bgnTokens.includes(token.type)){
+        if(token.type === "DEF")
+            parse_function_full(); //won't actully be implemented
+        else
+            parse_stmt_list();
+        token = peek();
+        if(token.type !== "END_OF_FILE")
+            parse_program();
+    }else{
         syntax_error();
     }
 }
 
-function parse_stmt_list(input, sameLine){
-    var bgnStmtWord = ["IMPORT", "IF", "FOR", "WHILE", "ID", "PRINT"];
-    var indent = "";
-    
-    if(!sameLine){ //The statement is on a newline, and thus has its own indentation 
-        indent = checkSpace(input); //Counts spaces from indentation
-        //Check that it fits the conditions of the indent stack
-    }
-    else{//Otherwise the statement is on the same line as another statement, meaning it has the same indentation as the previous statement
-        //indent = indentStack.peek() //Should equal the top of the indent stack, as the previous statement should be correct with regards to the indent stack conditions
-    }
-    
-    var revisedInput = ignoreSpace(input);      //Current input minus the previous spaces token
-    var token1 = getToken(revisedInput);        //Get beginning token of a statement
-    
-    if(bgnStmtWord.includes(token1.type)){
-        revisedInput = ungetToken(revisedInput, indent); //Unget spaces token to assure correct spacing is kept throughout parsing process
-        
-        revisedInput = parse_stmt(revisedInput);    //Set revisedInput to the input that remains after parsing the previous statement in the stmt_list
-        
-        revisedInput = parse_empty_lines(revisedInput);
-        
-        var indentOrSpace1 = checkSpace(revisedInput); //Check for spacing and skip those spaces if in scope.
-        revisedInput = ignoreSpace(revisedInput);
-        var token2 = getToken(revisedInput);
-        
-        //May need to check to make sure semicolon is on the same line as currStmtLine
-        if(token2.type === "SEMICOLON"){
-            revisedInput = revisedInput.slice(token2.length);
-            
-            revisedInput = parse_empty_lines(revisedInput);
-            
-            var indentOrSpace2 = checkSpace(revisedInput);
-            revisedInput = ignoreSpace(revisedInput);
-            var token3 = getToken(revisedInput);
-            
-            //This is technically valid no matter what.
-            if(bgnStmtWord.includes(token3.type)){
-                if(token1.line_no === token3.line_no){ //The new statement is on the same line after a semicolon, and indentation won't matter
-                    revisedInput = parse_stmt_list(revisedInput, true);
-                }
-                else if(token1.line_no !== token3.line_no){ //The new statement is on a different line after the semicolon, and indentation matters
-                    revisedInput = ungetToken(revisedInput, indentOrSpace2);
-                    revisedInput = parse_stmt_list(revisedInput, false);
-                }
-                else{
-                    
-                    return syntax_error();
-                }
-            }
-            else{
-                return syntax_error();
-            }
-        }
-        else if(bgnStmtWord.includes(token2.type)){      //Check if there's another statement in the input, otherwise return the current input to parse_program
-            
-            if(token1.line_no !== token2.line_no){ //A statement does not have a semicolon, and appears on its own line after the previous one.
-                revisedInput = ungetToken(revisedInput, indentOrSpace1);             
-                revisedInput = parse_stmt_list(revisedInput, false);
-            }
-            else{
-                
-                var specialCases = [];
-                if(specialCases.includes(token2.type)){
-                    //TO DO
-                    //Consider how to address special cases that
-                    //For now throw syntax error
-                }
-                else{
-                    return syntax_error();
-                }
-            }   
-        }
-        
-        return revisedInput;  
-    }
-    else if(token1.type === "END_OF_FILE"){
-        return revisedInput;
-    }
-    else{
-        return syntax_error();
-    }  
+function parse_function_full(){
+    //we aren't handling function calls
 }
 
+/*function parse_function_def(){
+    
+}
 
-function parse_stmt(input){
-    //var indent = checkSpace(input);
-    var revisedInput = ignoreSpace(input);
-    var token1 = getToken(revisedInput);
-    document.write("<br>"+ revisedInput + "<br>");
-    //Could probably check for indentation in this function instead, but will need to consider the impact
-    //of multiple statements on the same line (delimited by semicolon).
-    switch(token1.type){
-        case "IMPORT":
-            revisedInput = parse_import_stmt(input);
+function parse_parameter_list(){
+    
+}
+
+function parse_parameter(){
+    
+}*/
+
+/*function parse_new_body(){
+    
+}
+
+function parse_body(){
+    
+}
+
+function parse_body_no_indent(){
+    
+}*/
+
+function parse_stmt_list(){
+    parse_stmt();
+    var token = peek();
+    if(token.type !== "END_OF_FILE"){//some statements are the end of the program & won't have a line break
+        if(token.type === "END_OF_LINE")
+            expect("END_OF_LINE");
+        else{
+            expect("SEMICOLON");
+            token = peek(); //sometimes a semicolon is followed by a line break
+            if(token.type === "END_OF_LINE")
+                expect("END_OF_LINE");
+        }
+    }
+    var stmt_Starts = ["IF", "FOR" , "WHILE", "ID", "PRINT"];
+    token = peek();
+    if(stmt_Starts.includes(token.type)) //this stmt is followed by a statement
+        parse_stmt_list();
+}
+
+function parse_stmt(){
+    var token = peek();
+    if(bgnTokens.includes(token.type)){
+        switch(token.type){
+            case "IF": parse_if_stmt();
+                break;
+            case "FOR": parse_for_stmt();
+                break;
+            case "WHILE": parse_while_stmt();
+                break;
+            case "ID": parse_assign_stmt();
+                break;
+            case "PRINT": parse_print_stmt();
+                break;
+                //add comment stmt check
+            default: syntax_error();
+                break;
+        }
+    }
+}
+
+function parse_if_stmt(){
+    expect("IF");
+    parse_conditional();
+    expect("COLON");
+    expect("END_OF_LINE");
+    parse_stmt_list();
+    parse_else_stmt();
+}
+
+function parse_else_stmt(){
+    var token = peek();
+    if(token.type === "ELIF"){
+        expect("ELIF");
+        parse_conditional();
+        expect("COLON");
+        expect("END_OF_LINE");
+        parse_stmt_list();
+        parse_else_stmt();
+    }else if (token.type === "ELSE"){
+        expect("ELSE");
+        parse_conditional();
+        expect("COLON");
+        expect("END_OF_LINE");
+        parse_stmt_list();
+    }//else do nothing, no else detected
+}
+
+function parse_conditional(){
+    parse_primary();
+    var token = peek();
+    var compare_ops = ["COMPARE_EQUALS", "NOT_EQUAL", "LESS_THAN", "LESS_THAN_EQUAL", "GREATER_THAN", "GREATER_THAN_EQUAL"];
+    if(compare_ops.includes(token.type)){
+        parse_comparison_operator();
+        parse_primary();
+        token = peek();
+        var link_ops = ["AND", "OR"];
+        if(link_ops.includes(token.type) ){
+            parse_comparison_link();
+            parse_conditional();
+        }
+    }
+}
+
+function parse_comparison_operator(){
+    var token = peek();
+    var compare_ops = ["COMPARE_EQUALS", "NOT_EQUAL", "LESS_THAN", "LESS_THAN_EQUAL", "GREATER_THAN", "GREATER_THAN_EQUAL"];
+    if(compare_ops.includes(token.type)){
+        switch(token.type){
+            case "COMPARE_EQUALS": expect("COMPARE_EQUALS");
+                break;
+            case "NOT_EQUAL": expect("NOT_EQUAL");
+                break;
+            case "LESS_THAN": expect("LESS_THAN");
+                break;
+            case "LESS_THAN_EQUAL": expect("LESS_THAN_EQUAL");
+                break;
+            case "GREATER_THAN": expect("GREATER_THAN");
+                break;
+            case "GREATER_THAN_EQUAL": expect("GREATER_THAN_EQUAL");
+                break;
+            default: syntax_error();
+                break;
+        }
+    }else
+        syntax_error();
+}
+
+function parse_comparison_link(){
+    var token = peek();
+    var link_ops = ["AND", "OR"];
+    if(link_ops.includes(token.type) ){
+        switch(token.type){
+            case "AND": expect("AND");
+                break;
+            case "OR": expect("OR");
+                break;
+            default: syntax_error();
+                break;
+        }
+    }else
+        syntax_error();
+}
+
+function parse_for_stmt(){
+    expect("FOR");
+    expect("ID");
+    expect("IN");
+    var token = peek();
+    switch(token.type){
+        case "RANGE":
+            expect("RANGE");
+            expect("LPAREN");
+            expect("NUMBER");
+            expect("COMMA");
+            expect("NUMBER");
+            expect("RPAREN");
+            expect("COLON");
+            parse_new_body();
             break;
-        case "IF":
-            revisedInput = parse_if_stmt(input);
+        case "XRANGE":
             break;
-        case "FOR":
-            revisedInput = parse_for_stmt(input);
-            break;
-        case "WHILE":
-            revisedInput = parse_while_stmt(input);
-            break;
-        case "PRINT":
-            revisedInput = parse_print_stmt(input);
+        case "MY_RANGE":
             break;
         case "ID":
-            revisedInput = parse_assign_stmt(input);
             break;
-        default:
-            return syntax_error();
+        default: syntax_error();
+            break;
     }
-    
-    return revisedInput;
-        
 }
 
-function parse_assign_stmt(input){
-    var indent = checkSpace(input); //For indent stack when implemented
-    var revisedInput = ignoreSpace(input);
-    var token1 = getToken(revisedInput);
+function parse_while_stmt(){
     
-    if(token1.type === "ID"){
-        revisedInput = revisedInput.slice(token1.length); //GET ID TOKEN
+}
 
-        var space1 = checkSpace(revisedInput);
-        revisedInput = ignoreSpace(revisedInput);
-        var token2 = getToken(revisedInput);
-
-        if(token2.type === "ASSIGN_EQUALS" || token2.type === "ADD_ASSIGN" || token2.type === "SUBTRACT_ASSIGN"){
-            revisedInput = revisedInput.slice(token2.length); //GET ASSIGN_EQUALS TOKEN
-            
-            var space2 = checkSpace(revisedInput);
-            revisedInput = ignoreSpace(revisedInput);
-            var token3 = getToken(revisedInput);
-            //There's some commonanilty with some of these cases, maybe I should consider changing 
-            //the case organization 
-            switch(token3.type){
+function parse_assign_stmt(){
+    expect("ID");
+    var token = peek();
+    var math_assigns = ["ADD_ASSIGN", "SUB_ASSIGN", "MULT_ASSIGN", "DIV_ASSIGN", "MOD_ASSIGN"];
+    if(math_assigns.includes(token.type)){ //calc & assign statements
+        parse_assign_op();
+        token = peek();
+        parse_expr();
+    }else if(token.type === "ASSIGN_EQUALS"){ // simply assigning, but could be a multi assign statement
+        expect("ASSIGN_EQUALS");
+        token = peek();
+        var token2 = peek_2_ahead();
+        if(token.type === "ID"){
+            if(math_assigns.includes(token2.type) || token2.type === "ASSIGN_EQUALS" ||
+                    token2.type === "END_OF_LINE" || token2.type === "SEMICOLON"){ //2nd tokens indicative of an assign stmt
+                parse_assign_stmt();
+            }else //else an id should be a primary/expression
+                parse_expr();
+        }else{
+            switch(token.type){
                 case "NUMBER":
                 case "FLOAT":
-                    
-                    revisedInput = revisedInput.slice(token3.length); //GET NUMBER TOKEN
-                    
-                    var space3 = checkSpace(revisedInput);
-                    revisedInput = ignoreSpace(revisedInput);
-                    var token4 = getToken(revisedInput);
-                    
-                    var arith_ops = ["PLUS", "MINUS","MULTIPLY", "DIVIDE", "MODULO"];
-                    var cmpr_ops = ["COMPARE_EQUALS", "NOT_EQUAL","LESS_THAN_EQUAL", "LESS_THAN", "GREATER_THAN", "GREATER_THAN_EQUAL"];
-
-                    if(arith_ops.includes(token4.type) || cmpr_ops.includes(token4.type)){
-                        revisedInput = ungetToken(revisedInput, space3);
-                        revisedInput = ungetToken(revisedInput, token3);
-                        revisedInput = ungetToken(revisedInput, space2);
-                        
-                        revisedInput = parse_expr(revisedInput);
-                    }
-                    else{
-                        document.write("Assign Number!<br>");
-                    }
-                    
-                    return revisedInput;
                 case "TRUE":
-                case "FALSE":
-                    
-                    revisedInput = revisedInput.slice(token3.length); //GET NUMBER TOKEN
-                    
-                    var space3 = checkSpace(revisedInput);
-                    revisedInput = ignoreSpace(revisedInput);
-                    var token4 = getToken(revisedInput);
-                    
-                    var arith_ops = ["PLUS", "MINUS","MULTIPLY", "DIVIDE", "MODULO"];
-                    var cmpr_ops = ["COMPARE_EQUALS", "NOT_EQUAL","LESS_THAN_EQUAL", "LESS_THAN", "GREATER_THAN", "GREATER_THAN_EQUAL"];
-                    
-                    if(arith_ops.includes(token4.type) || cmpr_ops.includes(token4.type)){
-                        
-                        revisedInput = ungetToken(revisedInput, space3);
-                        revisedInput = ungetToken(revisedInput, token3);
-                        revisedInput = ungetToken(revisedInput, space2);
-                        
-                        revisedInput = parse_expr(revisedInput);
-                    }
-                    else{
-                        document.write("Assign Boolean!<br>");
-                    }
-                    
-                    return revisedInput;
-                case "ID":
-                    revisedInput = revisedInput.slice(token3.length);
-                    
-                    var space3 = checkSpace(revisedInput);
-                    revisedInput = ignoreSpace(revisedInput);
-                    var token4 = getToken(revisedInput);
-                    
-                    var arith_ops = ["PLUS", "MINUS","MULTIPLY", "DIVIDE", "MODULO"];
-                    var cmpr_ops = ["COMPARE_EQUALS", "NOT_EQUAL","LESS_THAN_EQUAL", "LESS_THAN", "GREATER_THAN", "GREATER_THAN_EQUAL"];
-                    
-                    if(arith_ops.includes(token4.type) || cmpr_ops.includes(token4.type)){
-                        
-                        revisedInput = ungetToken(revisedInput, space3);
-                        revisedInput = ungetToken(revisedInput, token3);
-                        revisedInput = ungetToken(revisedInput, space2);
-                        
-                        revisedInput = parse_expr(revisedInput);
-                    }
-                    else if(token4.type === "ASSIGN_EQUALS" && token4.type !== "ADD_ASSIGN" && token4.type !== "SUBTRACT_ASSIGN"){
-                        revisedInput = ungetToken(revisedInput, space3);
-                        revisedInput = ungetToken(revisedInput, token3);
-                        revisedInput = ungetToken(revisedInput, space2);
-                        
-                        revisedInput = parse_assign_stmt(revisedInput);
-                        document.write("Assign Same Value to Multiple Variables!<br>");
-                    }
-                    else if(token4.type === "PERIOD"){ //used for potential function operations on a variable
-                            //NEEDS TO BE ADDED
-                            //NEEDS TO CHECK THAT VARIABLE TYPE IS STRING
-                    }
-                    else{
-                        document.write("Assign to Variable Value!<br>");
-                    }
-                    return revisedInput;
-                case "LBRACE":
-                    //revisedInput = parse_list(input);
+                case "FALSE": parse_expr();
                     break;
-                case "LBRACKET":
-                    //revisedInput = parse_dictionary(input);
-                    //revisedInput = parse_set(input);
+                case "LPAREN": parse_tuple();
                     break;
-                case "LPAREN":
-                    //revisedInput = parse_tuple(input);
+                case "LBRACE": parse_list();
                     break;
-                case "STRING":
-                    revisedInput = revisedInput.slice(token3.length);
-                    
-                    var space3 = checkSpace(revisedInput);
-                    revisedInput = ignoreSpace(revisedInput);
-                    var token4 = getToken(revisedInput);
-                    
-                    var arith_ops = ["PLUS", "MINUS","MULTIPLY", "DIVIDE", "MODULO"];
-                    var cmpr_ops = ["COMPARE_EQUALS", "NOT_EQUAL","LESS_THAN_EQUAL", "LESS_THAN", "GREATER_THAN", "GREATER_THAN_EQUAL"];
-                    
-                    if(arith_ops.includes(token4.type) || cmpr_ops.includes(token4.type)){
-                        
-                        revisedInput = ungetToken(revisedInput, space3);
-                        revisedInput = ungetToken(revisedInput, token3);
-                        revisedInput = ungetToken(revisedInput, space2);
-                        
-                        revisedInput = parse_expr(revisedInput);
-                    }
-                    else if(token4.type === "PERIOD"){ //used for potential function operations on a string
-                        revisedInput = revisedInput.slice(token4.length);
-
-                        var space4 = checkSpace(revisedInput);
-                        revisedInput = ignoreSpace(revisedInput);
-                        var token5 = getToken(revisedInput);
-
-                        if(token5.id === "format"){
-                            revisedInput = ungetToken(revisedInput, space4);
-                            revisedInput = ungetToken(revisedInput, token4);
-                            revisedInput = ungetToken(revisedInput, space3);
-                            revisedInput = ungetToken(revisedInput, token3);
-
-                            revisedInput = parse_format_string(revisedInput);
-
-                            //Do I need to add parse_expr right after??
-                        }
-
-                    }
-                    else{
-                        document.write("Assign to String Value!<br>");
-                    }
+                //case String TODO
+                default: syntax_error();
                     break;
-                case "APOSTROPHE":
-                    //revisedInput = parse_string(input);
-                    break;
-                default:
-                    return syntax_error();
             }
         }
-        else if(token2.type === "COMMA"){
-            revisedInput = ungetToken(revisedInput, space1);
-            revisedInput = ungetToken(revisedInput, token1);
-            revisedInput = parse_multi_assign_stmt(revisedInput); //could just be input from parameter instead
-            //revisedInput = ungetToken(revisedInput, indent); //pop indent stack after
-        }
-        else{
-            return syntax_error();
-        }
-        
-        return revisedInput;
-    }
-    else{
-        return syntax_error();
-    }
+    }else if(token.type === "END_OF_LINE" || token.type === "SEMICOLON"){ //end of assign stmt recursion expected
+        //do nothing
+    }else
+        syntax_error();
 }
 
-function parse_expr(input){
-    var space1 = checkSpace(input);
-    var revisedInput = ignoreSpace(input);
-    var token1 = getToken(revisedInput);
-    
-    var expr_types = ["NUMBER", "FLOAT", "ID", "STRING", "TRUE", "FALSE"];
-    
-    if(expr_types.includes(token1.type)){
-        revisedInput = revisedInput.slice(token1.length);
-        
-        var space2 = checkSpace(revisedInput);
-        revisedInput = ignoreSpace(revisedInput);
-        var token2 = getToken(revisedInput);
-    
-        var arith_ops = ["PLUS", "MINUS","MULTIPLY", "DIVIDE", "MODULO"];
-        var cmpr_ops = ["COMPARE_EQUALS", "NOT_EQUAL","LESS_THAN_EQUAL", "LESS_THAN", "GREATER_THAN", "GREATER_THAN_EQUAL"];
-
-        if(arith_ops.includes(token2.type) || cmpr_ops.includes(token2.type)){
-            revisedInput = revisedInput.slice(token2.length);
-
-            var space3 = checkSpace(revisedInput);
-            revisedInput = ignoreSpace(revisedInput);
-            var token3 = getToken(revisedInput);
-
-            if(expr_types.includes(token3.type)){
-                revisedInput = revisedInput.slice(token3.length);
-
-                var space4 = checkSpace(revisedInput);
-                revisedInput = ignoreSpace(revisedInput);
-                var token4 = getToken(revisedInput);
-                
-                if(arith_ops.includes(token4.type) || cmpr_ops.includes(token4.type)){
-                    revisedInput = ungetToken(revisedInput, space4);
-                    revisedInput = ungetToken(revisedInput, token3);
-                    revisedInput = ungetToken(revisedInput, space3);
-                    
-                    revisedInput = parse_expr(revisedInput);
-                }
-                //TO DO
-                //Maybe add the format() function statement here instead...or actually more likely in addition to the one below
-                //consider just using revisedInput set to another variable, then use parse_format()
-                //with the current revisedInput. Create an if statement to see if the parsing caused
-                //a syntax error and, if it hasn't, pass that variable that was set to the previous revisedInput
-                //into the parse_expr() function after checking if there's another operator Token to be had 
-                //using the current revisedInput. Also make sure to do the below section as well, as it handles base case.
-                else{
-                    document.write("<br>Expression!<br>");
-                }
-                
-                return revisedInput;
-            }
-            else{
-                syntax_error();
-            }
+function parse_assign_op(){
+    var token = peek();
+    var op_assigns = ["ADD_ASSIGN", "SUB_ASSIGN", "MULT_ASSIGN", "DIV_ASSIGN", "MOD_ASSIGN"];
+    if(op_assigns.includes(token.type)){
+        switch(token.type){
+            case "ADD_ASSIGN": expect("ADD_ASSIGN");
+                break;
+            case "SUB_ASSIGN": expect("SUB_ASSIGN");
+                break;
+            case "MULT_ASSIGN": expect("MULT_ASSIGN");
+                break;
+            case "DIV_ASSIGN": expect("DIV_ASSIGN");
+                break;
+            case "MOD_ASSIGN": expect("MOD_ASSIGN");
+                break;
+            default: syntax_error();
+                break;
         }
-        //Possible function call on componenet of the first expression
-        else if(token2.type === "PERIOD" && (token1.type === "STRING" || token1.type === "ID")){
-            //Right now this will only account for the format function on a Variable or String
-            
+    }else
+            syntax_error();
+}
+
+function parse_primary(){
+    var token = peek();
+    var primaries = ["ID", "NUMBER", "FLOAT", "TRUE", "FALSE"];
+    if(primaries.includes(token.type)){
+        switch(token.type){
+            case "ID": expect("ID");
+                break;
+            case "NUMBER": expect("NUMBER");
+                break;
+            case "FLOAT": expect("FLOAT");
+                break;
+            case "TRUE": expect("TRUE");
+                break;
+            case "FALSE": expect("FALSE");
+                break;
+            default: syntax_error();
+                break;
         }
-        else{
-           syntax_error(); 
-        }
-    }
-    else{
+    }else{
         syntax_error();
     }
+}
+
+function parse_string(){
     
 }
 
-/* TO DO 
- * Account for format()
- * 
- */
-function parse_multi_assign_stmt(input){
-    //var indent = checkSpace(input); //For indent stack
-    //var revisedInput = ignoreSpace(input);
-    var token1 = getToken(input);
-    
-    if(token1.type === "ID"){
-        var revisedInput = input.slice(token1.length); //Get ID token
-        revisedInput = ignoreSpace(revisedInput);
-        
-        var token2 = getToken(revisedInput);
-        
-        if(token2.type === "ASSIGN_EQUALS"){
-            revisedInput = revisedInput.slice(token2.length);
-            revisedInput = ignoreSpace(revisedInput);
-
-            var token3 = getToken(revisedInput);
-
-            var applicable = ["FLOAT","NUMBER","ID","STRING", "TRUE", "FALSE"];
-
-            if(applicable.includes(token3.type)){ //String, still needs to account for apostrophe as well
-                revisedInput = revisedInput.slice(token3.length);
-                
-                var space = checkSpace(revisedInput);
-                revisedInput = ignoreSpace(revisedInput);
-                var token4 = getToken(revisedInput);
-                
-                var arith_ops = ["PLUS", "MINUS","MULTIPLY", "DIVIDE", "MODULO"];
-                var cmpr_ops = ["COMPARE_EQUALS", "NOT_EQUAL","LESS_THAN_EQUAL", "LESS_THAN", "GREATER_THAN", "GREATER_THAN_EQUAL"];
-
-                if(cmpr_ops.includes(token4.type)|| arith_ops.includes(token4.type)){
-                    revisedInput = ungetToken(revisedInput, space);
-                    revisedInput = ungetToken(revisedInput, token3.id);
-                    
-                    revisedInput = parse_expr(revisedInput);
-                }
-                 
-                return revisedInput;
-            }
-            else{
-                return syntax_error();
-            }
-
-        }
-        else if(token2.type === "COMMA"){
-            revisedInput = revisedInput.slice(token2.length); //Get COMMA token
-            revisedInput = ignoreSpace(revisedInput);
-            revisedInput = parse_multi_assign_stmt(revisedInput);
-
-            revisedInput = ignoreSpace(revisedInput);
-            var token3 = getToken(revisedInput);
-
-            if(token3.type === "COMMA"){
-                revisedInput = revisedInput.slice(token3.length);
-                revisedInput = ignoreSpace(revisedInput);
-
-                var token4 = getToken(revisedInput);
-
-                var applicable = ["FLOAT","NUMBER","ID","STRING"];
-
-                if(applicable.includes(token4.type)){//Parse String, need to account for apostrophe as well
-                    revisedInput = revisedInput.slice(token4.length);
-                    
-                    var space = checkSpace(revisedInput);
-                    revisedInput = ignoreSpace(revisedInput);
-                    var token5 = getToken(revisedInput);
-
-                    var arith_ops = ["PLUS", "MINUS","MULTIPLY", "DIVIDE", "MODULO"];
-                    var cmpr_ops = ["COMPARE_EQUALS", "NOT_EQUAL","LESS_THAN_EQUAL", "LESS_THAN", "GREATER_THAN", "GREATER_THAN_EQUAL"];
-
-                    if(cmpr_ops.includes(token5.type)|| arith_ops.includes(token5.type)){
-                        revisedInput = ungetToken(revisedInput, space);
-                        revisedInput = ungetToken(revisedInput, token4.id);
-
-                        revisedInput = parse_expr(revisedInput);
-                    }
-                    
-                    document.write("<br><br>Multi-Assigned-Statement!<br><br>");
-                    
-                    return revisedInput;
-                }
-                else{
-                    return syntax_error();
-                }
-
-            }
-            else{
-                return syntax_error();
-            }  
-
-        }
-        else{
-            return syntax_error();
-        }
-        
-    }
-    else{
-        return syntax_error();
-    }
+function parse_string_list(){
     
 }
 
-/*
-function parse_for_stmt(input){
+function parse_list(){
     
 }
 
-function parse_if_stmt(input){
+function parse_tuple(){
     
 }
 
-function parse_elif_stmt(input){
-    
+function parse_expr(){
+    parse_primary();
+    var token = peek();
+    var operations = ["PLUS", "MINUS", "MULT", "DIV", "MOD", "EXPO", "IN", "NOTIN", "IS", "ISNOT"];
+    var compare_ops = ["COMPARE_EQUALS", "NOT_EQUAL", "LESS_THAN", "LESS_THAN_EQUAL", "GREATER_THAN", "GREATER_THAN_EQUAL"];
+    if(operations.includes(token.type)){
+        parse_op();
+        parse_expr();
+    }else if(compare_ops.includes(token.type)){
+        parse_comparison_operator();
+        parse_expr();
+    }//else do nothing
 }
 
-function parse_else_stmt(input){
-    
-}
-                            
-function parse_while_stmt(input){
-    
-}                           
-*/
-
-function parse_import_stmt(input){
-    //var indent = checkSpace(input);
-    var revisedInput = ignoreSpace(input);
-    var token1 = getToken(revisedInput);
-    
-    if(token1.type === "IMPORT"){
-        revisedInput = revisedInput.slice(token1.length);
-            
-        revisedInput = ignoreSpace(revisedInput);
-        var token2 = getToken(revisedInput);
-
-        if(token2.type === "ID"){
-            revisedInput = revisedInput.slice(token2.length);
-            document.write("Import Statement<br>");
-
-            return revisedInput;
-        } 
-        return syntax_error();
-    }
-    
-}
-
-function parse_print_stmt(input){
-    var indent = checkSpace(input);
-    var revisedInput = ignoreSpace(input);
-    var token1 = getToken(input); //Get PRINT token
-    
-    if(token1.type === "PRINT"){
-        var revisedInput = revisedInput.slice(token1.length);
-        
-        revisedInput = ignoreSpace(revisedInput);
-        var token2 = getToken(revisedInput); //Get LPAREN token
-
-        if(token2.type === "LPAREN"){
-            revisedInput = revisedInput.slice(token2.length);
-
-            revisedInput = ignoreSpace(revisedInput);
-            var token3 = getToken(revisedInput); //Get RPAREN, STRING, ID, NUMBER, FLOAT, TRUE, or FALSE token
-            
-            switch(token3.type){ //All should account for expressions used inside the print statement
-                case "RPAREN": //print() case
-                    revisedInput = revisedInput.slice(token3.length);
-                    return revisedInput;
-                case "STRING":
-                    revisedInput = revisedInput.slice(token3.length);
-                    
-                    var space1 = checkSpace(revisedInput);
-                    revisedInput = ignoreSpace(revisedInput);
-                    var token4 = getToken(revisedInput);
-                    
-                    var arith_ops = ["PLUS", "MINUS","MULTIPLY", "DIVIDE", "MODULO"];
-                    var cmpr_ops = ["COMPARE_EQUALS", "NOT_EQUAL","LESS_THAN_EQUAL", "LESS_THAN", "GREATER_THAN", "GREATER_THAN_EQUAL"];
-                    
-                    if(arith_ops.includes(token4.type) || cmpr_ops.includes(token4.type)){
-                        revisedInput = ungetToken(revisedInput, space1);
-                        revisedInput = ungetToken(revisedInput, token3);
-                                    
-                        revisedInput = parse_expr(revisedInput);
-                    }
-                    else if(token4.type === "PERIOD"){ //used for potential function operations on a string
-                        revisedInput = revisedInput.slice(token4.length);
-
-                        var space2 = checkSpace(revisedInput);
-                        revisedInput = ignoreSpace(revisedInput);
-                        var token5 = getToken(revisedInput);
-
-                        if(token5.id === "format"){
-                            revisedInput = ungetToken(revisedInput, space2);
-                            revisedInput = ungetToken(revisedInput, token4);
-                            revisedInput = ungetToken(revisedInput, space1);
-                            revisedInput = ungetToken(revisedInput, token3);
-							
-                            var placeHolder = revisedInput; //holds at least "someString".format and the remaining input in case an expression needs to be parsed
-							
-                            revisedInput = parse_format_string(revisedInput); //returns the remaining input after parsing the format function call
-																			  //Or returns a syntax_error
-                            var space3 = checkSpace(revisedInput);
-                            revisedInput = ignoreSpace(revisedInput);
-                            var token6 = getToken(revisedInput);
-                            //TO DO
-                            //See the TO DO in parse_expr functino. That same insight should help.
-                            //Might be done for now?
-                            if(arith_ops.includes(token6.type) || cmpr_ops.includes(token6.type)){
-                                revisedInput = parse_expr(placeHolder);
-                            }
-                        }
-                    }
-                    break;
-                case "ID":
-                    break;
-                case "NUMBER":
-                case "FLOAT":
-                case "TRUE":
-                case "FALSE":
-                    revisedInput = revisedInput.slice(token3.length);
-                    
-                    var space = checkSpace(revisedInput);
-                    revisedInput = ignoreSpace(revisedInput);
-                    var token4 = getToken(revisedInput);
-                    
-                    var arith_ops = ["PLUS", "MINUS","MULTIPLY", "DIVIDE", "MODULO"];
-                    var cmpr_ops = ["COMPARE_EQUALS", "NOT_EQUAL","LESS_THAN_EQUAL", "LESS_THAN", "GREATER_THAN", "GREATER_THAN_EQUAL"];
-
-                    if(cmpr_ops.includes(token4.type)|| arith_ops.includes(token4.type)){
-                        revisedInput = ungetToken(revisedInput, space);
-                        revisedInput = ungetToken(revisedInput, token3.id);
-                        
-                        revisedInput = parse_expr(revisedInput);
-                    }
-                    else{
-                        revisedInput = revisedInput.slice(token4.id);
-                    }
-                    break;
-                default:
-                    return syntax_error();
-            }
-            
-            revisedInput = ignoreSpace(revisedInput);
-            var token4 = getToken(revisedInput);
-            
-            if(token4.type === "RPAREN"){ //Anything that is not print(), but is valid syntax
-                revisedInput = revisedInput.slice(token4.length);
-                document.write("<br>Print " + token3.type + " Statement<br>");
-                return revisedInput;
-            }
-            else{
-                return syntax_error();
-            }
-        }
-        else{
-            return syntax_error();
-        }
-    }
-    else{
-        return syntax_error();
-    }
-	
-}
-
-//The format() function only needs as many parameters/arguments as the number of bracket pairings that are in the string it evaluates
-function parse_format_string(input){
-    //Use the length of the STRING token in order to obtain the ending quotation mark
-    //Then get rid of the beginning and ending quotation marks to evaluate the content of the string
-    var token1 = getToken(input);
-    
-    if(token1.type === "STRING"){
-        var revisedInput = revisedInput.slice(token1.length);
-        
-        var space1 = checkSpace(revisedInput);
-        revisedInput = ignoreSpace(revisedInput);
-        var token2 = getToken(revisedInput);
-        
-	var stringContent = (token1.id).substring(1,token1.length-1);
-        
-        if(token2.type === "PERIOD"){ //used for potential function operations on a string
-            revisedInput = revisedInput.slice(token2.length);
-
-            var space2 = checkSpace(revisedInput);
-            revisedInput = ignoreSpace(revisedInput);
-            var token3 = getToken(revisedInput);
-
-            if(token3.id === "format"){
-                revisedInput = revisedInput.slice(token3.length);
-                var space3 = checkSpace(revisedInput);
-                revisedInput = ignoreSpace(revisedInput);
-                var token4 = getToken(revisedInput);
-                
-                if(token4.id === "LPAREN"){
-                    revisedInput = revisedInput.slice(token4.length);
-                    
-                    var space4 = checkSpace(revisedInput);
-                    revisedInput = ignoreSpace(revisedInput);
-                    var token5 = getToken(revisedInput);
-                    
-                    /*
-                    *Use the some_format_occurs methods to determine some information about the contents of the STRING token
-                    *
-                    *Remember, the only thing that the STRING section dictates on the format() function
-                    *is the number of arguments based on {}, {NUMBER}, and {namedArguement}s that appear in the STRING.
-                    *
-                    *So if we get the total number of format occurances from either {} + {namedArguement}s
-                    *or {NUMBER} + {namedArguement} then we should be able to get the minimum number of parameters
-                    *needed within the format() function.
-                    *
-                    *
-                    *
-                    */
-                    
-                    if(token5.type === "RPAREN"){
-                        revisedInput = revisedInput.slice(token5.length);
-                    }
-                    else{
-                        var applicable = ["FLOAT","NUMBER","ID","STRING", "TRUE", "FALSE"];
-
-                        var isRPAREN = false;
-                        var nameFmtOccurs = false;
-                        
-                        //define possible tokens to default outside of while loop
-                        var token6 = token4;
-                        var token7 = token4;
-
-                        while(!isRPAREN){
-                            revisedInput = ignoreSpace(revisedInput);
-                            token5 = getToken(revisedInput);
-                            
-                            if(applicable.includes(token5.type)){
-                                revisedInput = revisedInput.slice(token5.length);
-
-                                revisedInput = ignoreSpace(revisedInput);
-                                token6 = getToken(revisedInput);
-
-                                if(token6.type === "COMMA"){
-                                    revisedInput = revisedInput.slice(token6.length);
-
-                                    revisedInput = ignoreSpace(revisedInput);
-                                    token7 = getToken(revisedInput);
-
-                                    if(token7.type === "RPAREN"){ //"someString".format("bob", 9,)
-                                        revisedInput = revisedInput.slice(token7.length);
-
-                                        isRPAREN = true; //Exit while loop as RPAREN has been read
-                                    }
-                                    //Otherwise a loop will occur setting token5 to the value of token7
-                                    //If it's a PRIMARY token after the COMMA then this loop will continue until it hits a RPAREN token
-
-                                }
-                                else if(token5.type === "ID" && token6.type === "ASSIGN_EQUALS"){
-                                    //TO DO
-                                    //CHECK IF SINGLE ASSIGNMENT, OR EXPRESSION
-                                    //THEN CHECK FOR ANOTHER COMMA
-                                    //Then make while loop to loop through probably after the LPAREN token comparison
-                                }
-                            }
-                            else{
-                                revisedInput = syntax_error();
-                                isRPAREN = true;
-                            }
-                        }
-                    }
-                    
-                    return revisedInput;
-                    
-                }
-            }
-        }
-    }
-    else if(token1.type === "ID"){
-        //TO DO
-        //NEED WAY TO STORE VARIABLES AND THEIR DATA AS INPUT IS BEING PARSED
-        //CAN STILL TECHNICALLY DO NOW, AND LEAVE FOR RUN TIME ISSUE
-    }
-    //The stringContent should have already been evaluated as being valid when the string token was created.
-    //So checking it again for valid printable characters is unneeded, instead we can just look for symbols that
-    //denote important syntax of a format statement.
-    
-    //If the string content contains {} or {NUMBER} then commit to the corresponding format
-    //If both are used, then there's an error as both formats cannot be used together.
-    //However {namedArgument} can be used with either format, so this will also have to be accounted for in some way.
-    //In addition to accounting for this, all {namedArgument}s must be list at the end of the list of parameters for the format() function call
-    if(True){
-        //TO DO
+function parse_op(){
+    var token = peek();
+    switch(token.type){
+        case "PLUS": expect("PLUS");
+            break;
+        case "MINUS": expect("MINUS");
+            break;
+        case "MULT": expect("MULT");
+            break;
+        case "DIV": expect("DIV");
+            break;
+        case "MOD": expect("MOD");
+            break;
+        case "EXPO": expect("EXPO");
+            break;
+        case "IN": expect("IN");
+            break;
+        case "NOTIN": expect("NOTIN");
+            break;
+        case "IS": expect("IS");
+            break;
+        case "ISNOT": expect("ISNOT");
+            break;
+        default: syntax_error();
+            break;
     }
 }
 
-//"Test #{} For {} Strings".format(1, "Format")
-//"Test #{} For {type} Strings".format(1, type = "Format")
-function auto_format_occurs(string){
-    var subStr = "{}";
-    var numOfOccurs = 0;
-    //TO DO
-	
+function parse_print_stmt(){
     
-    return [numOfOccurs, numOfOccurs>0];
 }
 
-//"Test #{0} For {1} Strings".format(1, "Format")
-//"Test #{number) For {0} Strings".format("Format", number = 1)
-function manual_num_format_occurs(string){
-    var numOfOccurs = 0;
-    //TO DO
+function parse_print_type(){
     
-    return [numOfOccurs, numOfOccurs>0];
 }
 
-//"Test #{number} For {type} Strings".format(number = 1, type = "Format")
-//Potentially create this function to return all values inside the bracket pairs and then check those values against
-//the ID tokens used withing the paranthesis of the format() function call.
-function manual_named_format_occurs(string){
-    var numOfOccurs = 0;
-    var namedArguements = [];
-    //TO DO
+function parse_string_print(){
     
-    return [numOfOccurs, namedArguements];
 }
 
-function parse_input_stmt(input){
-    //TO DO
+function parse_valid_printables(){
+    
 }
-function syntax_error(){
-    document.write("<br>Syntax Error.<br>");
-    return "";
+
+function parse_var_print(){
+    
+}
+
+function parse_format_print(){
+    
+}
+
+function parse_unordered_print(){
+    
+}
+
+function parse_string_recursive(){
+    
+}
+
+function parse_var_recursive(){
+    
+}
+
+function parse_ordered_format(){
+    
+}
+
+function parse_string_non_recursive(){
+    
+}
+
+function parse_var_non_recursive(){
+    
+}
+
+function parse_input_stmt(){
+    
 }
