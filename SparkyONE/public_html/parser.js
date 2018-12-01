@@ -27,6 +27,7 @@ function peek(){
     return token;
 }
 
+//use very carefully because if the first token peeked is a line break, skip spaces when peeking a second time might alter indents
 function peek_2_ahead(){ //necessary for a few location is parser
     skipSpaces();
     var token = getToken(program);
