@@ -20,6 +20,16 @@ function skipSpaces(){
     //else do nothing
 }
 
+//TO DO
+//Consider using saveSpaces as a way to help with the potential danger of peek_2_ahead
+//used to save potentially useful spaces
+/*function saveSpaces(){
+    var token = getToken(program);
+    if(token.type === "SPACE"){
+        return token.id;
+    }
+}*/
+
 //reads & returns next token, ignoring spaces
 function peek(){
     skipSpaces();
@@ -79,6 +89,8 @@ function readEmptyLines(){
 function parse_begin_program(input){
     program = input;
     var token = peek();
+    //TO DO
+    //Could just call read empty lines directly instead 
     if(token.type === "END_OF_LINE")
         expect("END_OF_LINE"); //this will precede to read all empty lines
     token = peek();
@@ -318,6 +330,7 @@ function parse_while_stmt(){
 }
 
 function parse_assign_stmt(){
+    var multi_token = peek(); //used in the case we need to unget the ID, for the multi_val_assign_stmt
     expect("ID");
     var token = peek();
     var math_assigns = ["ADD_ASSIGN", "SUB_ASSIGN", "MULT_ASSIGN", "DIV_ASSIGN", "MOD_ASSIGN"];
@@ -330,8 +343,7 @@ function parse_assign_stmt(){
         token = peek();
         var token2 = peek_2_ahead();
         if(token.type === "ID"){
-            if(math_assigns.includes(token2.type) || token2.type === "ASSIGN_EQUALS" ||
-                    token2.type === "END_OF_LINE" || token2.type === "SEMICOLON"){ //2nd tokens indicative of an assign stmt
+            if(token2.type === "ASSIGN_EQUALS" || token2.type === "END_OF_LINE" || token2.type === "SEMICOLON"){ //2nd tokens indicative of an assign stmt
                 parse_assign_stmt();
             }else //else an id should be a primary/expression
                 parse_expr();
@@ -351,10 +363,44 @@ function parse_assign_stmt(){
                     break;
             }
         }
+    }else if(token.type === "COMMA"){ //a,b,c,d = 1,2,3,4
+        program = ungetToken(program, multi_token);
+        parse_multi_val_assign_stmt();      
     }else if(token.type === "END_OF_LINE" || token.type === "SEMICOLON"){ //end of assign stmt recursion expected
         //do nothing
     }else
         syntax_error();
+}
+
+function parse_multi_val_assign_stmt(){ //a,b,c,d = 1,2,3,4
+    expect("ID");
+    var token = peek();
+    if(token.type === "ASSIGN_EQUALS"){
+        expect("ASSIGN_EQUALS");
+        token = peek();
+        var applicable = ["FLOAT","NUMBER","ID", "TRUE", "FALSE"];  
+        if(applicable.includes(token.type)){
+            parse_expr();
+        }else{
+            syntax_error();
+        }
+    }else if(token.type === "COMMA"){
+        expect("COMMA");
+        parse_multi_val_assign_stmt();
+        token = peek();
+        if(token.type === "COMMA"){
+            expect("COMMA");
+            token = peek();
+            var applicable = ["FLOAT","NUMBER","ID", "TRUE", "FALSE"];
+            if(applicable.includes(token.type)){
+                parse_expr();
+            }else{
+                syntax_error();
+            }
+        }else{
+            syntax_error();
+        }
+    }
 }
 
 function parse_assign_op(){
@@ -461,7 +507,7 @@ function parse_op(){
 }
 
 function parse_print_stmt(){
-    
+
 }
 
 function parse_print_type(){
@@ -492,6 +538,7 @@ function parse_string_recursive(){
     
 }
 
+//Should probably included with string recursive
 function parse_var_recursive(){
     
 }
