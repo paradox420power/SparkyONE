@@ -366,6 +366,8 @@ function parse_assign_stmt(){
     }else if(token.type === "COMMA"){ //a,b,c,d = 1,2,3,4
         program = ungetToken(program, multi_token);
         parse_multi_val_assign_stmt();      
+    }else if(token.type === "PERIOD"){ //function call
+        
     }else if(token.type === "END_OF_LINE" || token.type === "SEMICOLON"){ //end of assign stmt recursion expected
         //do nothing
     }else
@@ -465,8 +467,26 @@ function parse_tuple(){
 }
 
 function parse_expr(){
-    parse_primary();
     var token = peek();
+    if(token.type === "ID"){
+        expect("ID");
+        var token2 = peek();
+        if(token2.type === "PERIOD"){//Used in case of a function, in this case we only have the format function
+            token2 = peek_2_ahead();
+            if(token2.type === "FORMAT"){ //In case of print(a.format())
+                program = ungetToken(program, token);
+                parse_format_function();
+            }else{
+                //Currently no other functions supported
+                //So throw error
+                syntax_error();
+            }
+        }
+        //otherwise just parse the ID primary and continue parsing potential expression
+    }else{
+        parse_primary();
+    }
+    token = peek();
     var operations = ["PLUS", "MINUS", "MULT", "DIV", "MOD", "EXPO", "IN", "NOTIN", "IS", "ISNOT"];
     var compare_ops = ["COMPARE_EQUALS", "NOT_EQUAL", "LESS_THAN", "LESS_THAN_EQUAL", "GREATER_THAN", "GREATER_THAN_EQUAL"];
     if(operations.includes(token.type)){
@@ -507,7 +527,45 @@ function parse_op(){
 }
 
 function parse_print_stmt(){
+    expect("PRINT");
+    expect("LPAREN");
+    var token = peek();
+    switch(token.type){
+        case "RPAREN": expect("RPAREN");
+            break;
+        case "ID":
+        case "NUMBER":
+        case "FLOAT":
+        case "TRUE":
+        case "FALSE":
+            parse_print_multi_val();
+            break;
+    }
+}
 
+//TO DO
+//Need to address implementation for String type eventually.
+//Currently this will account for every way to print with single input, or multiple inputs for the print function
+function parse_print_multi_val(){
+    var token = peek();
+    var primaries = ["ID", "NUMBER", "FLOAT", "TRUE", "FALSE"];
+    if(primaries.includes(token.type)){
+        parse_expr();
+        var token = peek();
+        if(token.type === "COMMA"){
+            expect("COMMA");
+            parse_print_multi_val();
+        }else if(token.type === "RPAREN"){
+            expect("RPAREN");
+        }else{
+            syntax_error();
+        }
+    }else if(token.type === "RPAREN"){//Used in the case of print(a,) or print(5,) as these are still valid
+        expect("RPAREN");             //Could be checked inside the other statements if needed.
+    }else{
+        syntax_error();
+    }
+    
 }
 
 function parse_print_type(){
@@ -538,7 +596,7 @@ function parse_string_recursive(){
     
 }
 
-//Should probably included with string recursive
+//Should just be included with string recursive
 function parse_var_recursive(){
     
 }
