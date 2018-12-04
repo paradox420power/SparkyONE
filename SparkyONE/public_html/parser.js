@@ -539,6 +539,12 @@ function parse_print_stmt(){
         case "TRUE":
         case "FALSE":
             parse_print_multi_val();
+            token = peek();
+            if(token.type === "RPAREN"){
+                expect("RPAREN");
+            }else{
+                syntax_error();
+            }
             break;
     }
 }
@@ -555,17 +561,8 @@ function parse_print_multi_val(){
         if(token.type === "COMMA"){
             expect("COMMA");
             parse_print_multi_val();
-        }else if(token.type === "RPAREN"){
-            expect("RPAREN");
-        }else{
-            syntax_error();
         }
-    }else if(token.type === "RPAREN"){//Used in the case of print(a,) or print(5,) as these are still valid
-        expect("RPAREN");             //Could be checked inside the other statements if needed.
-    }else{
-        syntax_error();
     }
-    
 }
 
 function parse_print_type(){
