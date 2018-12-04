@@ -565,6 +565,93 @@ function parse_print_multi_val(){
     }
 }
 
+//TO DO
+//might be renamed to reflect it being specifically variable parsing instead of combining future String implementation
+function parse_format_function(){
+    var token = peek();
+    var token2;
+    if(token.type === "ID"){
+       expect("ID");
+       expect("PERIOD");
+       //need to add format to keywords (alternatively a different array) in order to get the token.
+       //That, or add a token equal to peek() and use an if statement to check that the token.id equals format
+       //then do expect() using the token that was set.
+       expect("FORMAT");
+       expect("LPAREN");
+       token = peek();
+       var nameFmtUsed = false;
+       var parameterCount = 0;//will be useful when grabbing the value stored inside a variable
+       while(token.type !== "RPAREN"){
+           token = peek();
+           token2 = peek_2_ahead();
+           if(!nameFmtUsed){//named parameters have not occured yet, meaning primaries and expressions can be used as well
+                if(token.type === "ID" && token2.type === "ASSIGN_EQUALS"){//asd.format(a=5)
+                   nameFmtUsed = true;
+                   expect("ID");
+                   expect("ASSIGN_EQUALS");
+                   parse_expr();
+                   parameterCount++;
+                   token = peek();//potentially set token to RPAREN and exit while loop
+                   if(token.type === "COMMA"){//asd.format(a=5, ...)
+                       expect("COMMA");
+                       token = peek();//potentially set token to RPAREN and exit while loop
+                       if(token.type === "RPAREN"){//asd.format(a=5,)
+                           expect("RPAREN");
+                       }
+                   }else{
+                       if(token.type === "RPAREN"){//asd.format(a=5)
+                           expect("RPAREN");
+                       }else{
+                           syntax_error();
+                       }
+                   }
+               }else{//asd.format(primary/expression, ...)
+                   parse_expr();
+                   parameterCount++;
+                   token = peek();
+                   if(token.type === "COMMA"){//asd.format(primary/expression, ...)
+                       expect("COMMA");
+                       token = peek();//potentially set token to RPAREN and exit while loop
+                       if(token.type === "RPAREN"){//asd.format(primary/expression, ... , primary/expression,)
+                           expect("RPAREN");
+                       }
+                   }else{
+                       if(token.type === "RPAREN"){ //asd.format(primary/expression, ... , primary/expression)
+                           expect("RPAREN");
+                       }else{
+                           syntax_error();
+                       }
+                   }
+               }
+           }else{//Only named paramters can appear after they've been used once
+               if(token.type === "ID" && token2.type === "ASSIGN_EQUALS"){ //asd.format(..., a=5, b=6, variable=...)
+                   expect("ID");
+                   expect("ASSIGN_EQUALS");
+                   parse_expr();
+                   parameterCount++;
+                   token = peek();//potentially set token to RPAREN and exit while loop
+                   if(token.type === "COMMA"){//asd.format(a=5, b=6, ...)
+                       expect("COMMA");
+                       token = peek();//potentially set token to RPAREN and exit while loop
+                       if(token.type === "RPAREN"){//asd.format(a=5, b=6, ... , z=10,)
+                           expect("RPAREN");
+                       }
+                   }else{
+                       if(token.type === "RPAREN"){//asd.format(a=5, b=6, ... , z=10)
+                           expect("RPAREN");
+                       }else{
+                           syntax_error();
+                       }
+                   }
+               }else{//There was a violation as only the named format can be used now.
+                   syntax_error();
+                   break;
+               }
+           }
+       }
+   }
+}
+
 function parse_print_type(){
     
 }
