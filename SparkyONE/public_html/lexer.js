@@ -12,12 +12,10 @@ var keySymbol = ["=", "+", "-", "*", "/", "%", "<", ">", ":", ";",
 
 
 //python's reserved words that a user shouldn't be able to use out of context
-//TO DO
-//Added "format" and "input" to reservedWord for testing for now
 var reservedWord = ["True", "False", "None", "and", "as", "assert", "break", "class",
     "continue", "def", "del", "elif", "else", "except", "finally", "for", "from",
 "global", "if", "import", "in", "is", "lambda", "my_range", "nonlocal", "not", "or", "pass", "print",
-"raise", "range", "return", "try", "while", "with", "xrange", "yield", "format", "input"];
+"raise", "range", "return", "try", "while", "with", "xrange", "yield"];
 
 var code_line = 1;
 
@@ -390,7 +388,9 @@ function getToken(input){
                 lexeme.length++;
                 break;
             case "\"":
-                lexeme = readString(input);
+                lexeme.id = "\"";
+                lexeme.type = "QUOTE";
+                lexeme.length++;
                 break;
             case "\'":
                 lexeme.id = "\'";
@@ -398,9 +398,15 @@ function getToken(input){
                 lexeme.length++;
                 break;
             case "\\":
-                lexeme.id = "\\";
-                lexeme.type = "ESCAPE_SLASH";
                 lexeme.length++;
+                if(input.charAt(1) === "\""){
+                    lexeme.length++;
+                    lexeme.id = "\\\"";
+                    lexeme.type = "ESCAPE_QUOTE";
+                }else{
+                    lexeme.id = "\\";
+                    lexeme.type = "ESCAPE_SLASH";
+                }
                 break;
             case ",":
                 lexeme.id = ",";
@@ -422,6 +428,11 @@ function getToken(input){
             case "\n":
                 lexeme.id = "line_break";
                 lexeme.type = "END_OF_LINE";
+                lexeme.length++;
+                break;
+            case "#":
+                lexeme.id = "#";
+                lexeme.type = "HASH_TAG";
                 lexeme.length++;
                 break;
             default:
@@ -457,9 +468,7 @@ function getToken(input){
 }
 
 function ungetToken(input, token){
-    //TO DO
-    //may need a space for safety
-    return token.id + " " + input;
+    return token.id + "" + input;
 }
 
 function incrementCodeLine(){
@@ -468,3 +477,4 @@ function incrementCodeLine(){
 function decrementCodeLine(){
     code_line--;
 }
+
