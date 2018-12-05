@@ -25,28 +25,29 @@ function skipSpaces(){
 
 function check_indents(){
     var token = getToken(program);
-    var current = indent_stack.pop();
-    if(token.type === "SPACE"){
-        if(token.length > current){
-            //unexpected indent
-            indent_stack = [];
-            indent_stack.push(0);
-            document.write("index syntax error at line " + token.line_no + "<br>Current: " + current + " TabLength: " + token.length + "<br>");
-            syntax_error();
-        } else if(token.length < current){
-            //posible dedent
-            document.write("Popping: " + current + "<br>");
-            check_indents();
-        } else if(token.length === current){
-            //matching indent
-            program = program.slice(token.length);
-            indent_stack.push(current);
+    if(indent_stack.length !== 1){
+        var current = indent_stack.pop();
+        document.write("Current: " + current + "<br>");
+        if(token.type === "SPACE"){
+            if(token.length > current){
+                //unexpected indent
+                indent_stack = [];
+                indent_stack.push(0);
+                document.write("index syntax error at line " + token.line_no + "<br>Current: " + current + " TabLength: " + token.length + "<br>");
+                syntax_error();
+            } else if(token.length < current){
+                //posible dedent
+                document.write("Popping: " + current + "<br>");
+                check_indents();
+            } else if(token.length === current){
+                //matching indent
+                program = program.slice(token.length);
+                indent_stack.push(current);
+            }
         }
-    } else {
-        //empty stack and push 0
-        indent_stack = [];
-        indent_stack.push(0);
     }
+    
+    
 }
 
 function increase_indent(){
@@ -232,7 +233,7 @@ function parse_stmt_list(){
     if(token.type !== "END_OF_FILE"){//some statements are the end of the program & won't have a line break
         if(token.type === "END_OF_LINE")
             expect("END_OF_LINE");
-        else{
+        else if(token.type === "SEMICOLON"){
             expect("SEMICOLON");
             token = peek(); //sometimes a semicolon is followed by a line break
             if(token.type === "END_OF_LINE")
