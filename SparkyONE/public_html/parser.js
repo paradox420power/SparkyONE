@@ -1,5 +1,5 @@
-
-var bgnTokens = ["IMPORT", "IF", "FOR", "WHILE", "ID", "PRINT"];
+//added INPUT in bgnTokens for testing purposes for now
+var bgnTokens = ["IMPORT", "IF", "FOR", "WHILE", "ID", "PRINT", "INPUT"];
 var program = "";
 
 //print parsing error
@@ -208,6 +208,11 @@ function parse_stmt(){
                 break;
             case "PRINT": parse_print_stmt();
                 break;
+            //TO DO
+            //Not useful, but still syntactically possible.
+            //Reads a line from input, but wouldn't set it to anything.
+            case "INPUT": parse_input_stmt();
+                break;
                 //add comment stmt check
             default: syntax_error();
                 break;
@@ -359,6 +364,8 @@ function parse_assign_stmt(){
                 case "LBRACE": parse_list();
                     break;
                 //case String TODO
+                case "INPUT": parse_input_stmt();
+                    break;
                 default: syntax_error();
                     break;
             }
@@ -698,5 +705,16 @@ function parse_var_non_recursive(){
 }
 
 function parse_input_stmt(){
-    
+    expect("INPUT");
+    expect("LPAREN");
+    var token = peek();
+    var primaries = ["FLOAT","NUMBER","ID", "TRUE", "FALSE"];
+    if(token.type === "RPAREN"){
+        expect("RPAREN");
+    }else if(primaries.includes(token.type)){
+        parse_expr();
+        expect("RPAREN");
+    }else{
+        syntax_error();
+    }
 }
