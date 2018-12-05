@@ -1,6 +1,7 @@
 //added INPUT in bgnTokens for testing purposes for now
 var bgnTokens = ["IMPORT", "IF", "FOR", "WHILE", "ID", "PRINT", "INPUT"];
 var program = "";
+var indent_stack = [];
 
 //print parsing error
 function error_expected_not_matching(expected, received, line_no){
@@ -16,8 +17,51 @@ function skipSpaces(){
     var token = getToken(program);
     if(token.type === "SPACE"){
         program = program.slice(token.length);
+        //token = getToken(program);
+        //document.write("Next Token: " + token.id + "<br>");
     }
     //else do nothing
+}
+
+function check_indents(){
+    var token = getToken(program);
+    if(indent_stack.length !== 1){
+        var current = indent_stack.pop();
+        document.write("Current: " + current + "<br>");
+        if(token.type === "SPACE"){
+            if(token.length > current){
+                //unexpected indent
+                indent_stack = [];
+                indent_stack.push(0);
+                document.write("index syntax error at line " + token.line_no + "<br>Current: " + current + " TabLength: " + token.length + "<br>");
+                syntax_error();
+            } else if(token.length < current){
+                //posible dedent
+                document.write("Popping: " + current + "<br>");
+                check_indents();
+            } else if(token.length === current){
+                //matching indent
+                program = program.slice(token.length);
+                indent_stack.push(current);
+            }
+        }
+    }
+    
+    
+}
+
+function increase_indent(){
+    var token = getToken(program);
+    if(token.type === "SPACE"){
+        current = indent_stack.pop();
+        if(current === token.length){
+            indent_stack.push(current);
+        } else {
+            indent_stack.push(current);
+            indent_stack.push(token.length);
+            document.write("Token: " + token.type + " adding " + token.length + " to stack at line " + token.line_no + "<br>");
+        }
+    }
 }
 
 //TO DO
@@ -58,6 +102,7 @@ function expect(tokenType){
             incrementCodeLine();
             readEmptyLines();
             //check correct indents (stack issue)
+            //check_indents();
         }
         //document.write(token.type + " read at line " + token.line_no + "<br>"); //comment this out when not trouble shooting
     }else{
@@ -78,7 +123,14 @@ function readEmptyLines(){
         if(token2.type === "END_OF_LINE") //if next is line break, its ok
             readEmptyLines();
         else //some keyword was read & the spaces could be indent that need to be read
-            program = token.id + "" + program; //add spliced id back to front of program
+            if(token.type === "SPACE"){
+                for(i = 0; i < token.length; i++){
+                    program = " " + program;
+                }
+                //increase_indent();
+            } else {
+                program = token.id + "" + program; //add spliced id back to front of program
+            }
     }else if(token.type === "END_OF_LINE"){
         program = program.slice(token.length);
         incrementCodeLine();
@@ -181,7 +233,7 @@ function parse_stmt_list(){
     if(token.type !== "END_OF_FILE"){//some statements are the end of the program & won't have a line break
         if(token.type === "END_OF_LINE")
             expect("END_OF_LINE");
-        else{
+        else if(token.type === "SEMICOLON"){
             expect("SEMICOLON");
             token = peek(); //sometimes a semicolon is followed by a line break
             if(token.type === "END_OF_LINE")
@@ -195,6 +247,7 @@ function parse_stmt_list(){
 }
 
 function parse_stmt(){
+    check_indents();
     var token = peek();
     if(bgnTokens.includes(token.type)){
         switch(token.type){
@@ -225,6 +278,7 @@ function parse_if_stmt(){
     parse_conditional();
     expect("COLON");
     expect("END_OF_LINE");
+    increase_indent();
     parse_stmt_list();
     parse_else_stmt();
 }
@@ -240,7 +294,7 @@ function parse_else_stmt(){
         parse_else_stmt();
     }else if (token.type === "ELSE"){
         expect("ELSE");
-        parse_conditional();
+        //parse_conditional();
         expect("COLON");
         expect("END_OF_LINE");
         parse_stmt_list();
