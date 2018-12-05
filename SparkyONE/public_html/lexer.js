@@ -12,10 +12,12 @@ var keySymbol = ["=", "+", "-", "*", "/", "%", "<", ">", ":", ";",
 
 
 //python's reserved words that a user shouldn't be able to use out of context
+//TO DO
+//Added "format" and "input" to reservedWord for testing for now
 var reservedWord = ["True", "False", "None", "and", "as", "assert", "break", "class",
     "continue", "def", "del", "elif", "else", "except", "finally", "for", "from",
 "global", "if", "import", "in", "is", "lambda", "my_range", "nonlocal", "not", "or", "pass", "print",
-"raise", "range", "return", "try", "while", "with", "xrange", "yield"];
+"raise", "range", "return", "try", "while", "with", "xrange", "yield", "format", "input"];
 
 var code_line = 1;
 
@@ -455,7 +457,9 @@ function getToken(input){
 }
 
 function ungetToken(input, token){
-    return token.id + "" + input;
+    //TO DO
+    //may need a space for safety
+    return token.id + " " + input;
 }
 
 function incrementCodeLine(){
@@ -464,4 +468,3 @@ function incrementCodeLine(){
 function decrementCodeLine(){
     code_line--;
 }
-
