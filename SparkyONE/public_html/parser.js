@@ -8,8 +8,110 @@ function error_expected_not_matching(expected, received, line_no){
     document.write("Expected Token: " + expected + "<br>Received Token: " + received + "<br>At line " + line_no + "<br>");
 }
 
-function syntax_error(){
-    document.write("Unspecified Syntax Error<br>");
+function syntax_error(errorType){
+    if (errorType === "UNKNOWN_SYMBOL")
+    {
+        alert("Program contains unknown symbols!");
+        exit();
+    }
+    
+    else if (errorType === "INVALID_STATEMENT")
+    {
+        alert("Invalid statement!");
+        exit();
+    }
+    
+    else if (errorType === "INDENTATION_ERROR")
+    {
+        alert("Indentation error detected!");
+        exit();
+    }
+    
+    else if (errorType === "INVALID_COND_OPERATOR")
+    {
+        alert("Invalid conditional operator!");
+        exit();
+    }
+    
+    else if (errorType === "INVALID_COMP_OPERATOR")
+    {
+        alert("Invalid comparison operator!");
+        exit();
+    }
+    
+    else if (errorType === "INVALID_LINK")
+    {
+        alert("Invalid comparison link!");
+        exit();
+    }
+    
+    else if (errorType === "INVALID_RANGE")
+    {
+        alert("Invalid ranged specified!");
+        exit();
+    }
+    
+    else if (errorType === "INVALID_RHS")
+    {
+        alert("Invalif right-hand side value/variable");
+        exit();
+    }
+    
+    else if (errorType === "INVALID_ASSIGNMENT")
+    {
+        alert("Invalid assignment operation!");
+        exit();
+    }
+    
+    else if (errorType === "INVALID_ASSIGN_OPERATOR")
+    {
+        alert("Invalid assignment operator!");
+        exit();
+    }
+    
+    else if (errorType === "INVALID_PRIMARY")
+    {
+        alert("Invalid primary type!");
+        exit();
+    }
+    
+    else if (errorType === "NON_FORMAT_ERROR")
+    {
+        alert("Only format() allowed!");
+        exit();
+    }
+    
+    else if (errorType === "INVALID_OPERATOR")
+    {
+        alert("Invalid arithmetic operator!");
+        exit();
+    }
+    
+    else if (errorType === "ERROR_MISSING_RIGHT_PARENTHESIS")
+    {
+        alert("Expecting right parenthesis!");
+        exit();
+    }
+    
+    else if (errorType === "ERROR_FORMAT_VIOLATION")
+    {
+        alert("format() violation detected!");
+        exit();
+    }
+    
+    else if (errorType === "INVALID_INPUT")
+    {
+        alert("Invalid input!");
+        exit();
+    }
+    
+    else
+    {
+        //document.write("Unspecified Error<br>");
+        alert("Unspecified Error");
+        exit();
+    }
+    
 }
 
 //used to remove unwanted spaces
@@ -34,7 +136,7 @@ function check_indents(){
                 indent_stack = [];
                 indent_stack.push(0);
                 document.write("index syntax error at line " + token.line_no + "<br>Current: " + current + " TabLength: " + token.length + "<br>");
-                syntax_error();
+                syntax_error("INDENTATION_ERROR");
             } else if(token.length < current){
                 //posible dedent
                 document.write("Popping: " + current + "<br>");
@@ -139,6 +241,11 @@ function readEmptyLines(){
 }
 
 function parse_begin_program(input){
+    
+    //TEST
+    /*alert("THIS IS AN ALERT");
+    exit();*/
+    
     program = input;
     var token = peek();
     //TO DO
@@ -156,7 +263,7 @@ function parse_begin_program(input){
     }else if(token.type === "END_OF_FILE"){
         //nothing to parse
     }else{
-        syntax_error();
+        syntax_error("UNKNOWN_SYMBOL");
     }
     
 }
@@ -195,7 +302,7 @@ function parse_program(){
         if(token.type !== "END_OF_FILE")
             parse_program();
     }else{
-        syntax_error();
+        syntax_error("UNKNOWN_SYMBOL");
     }
 }
 
@@ -267,7 +374,7 @@ function parse_stmt(){
             case "INPUT": parse_input_stmt();
                 break;
                 //add comment stmt check
-            default: syntax_error();
+            default: syntax_error("INVALID_STATEMENT");
                 break;
         }
     }
@@ -315,6 +422,11 @@ function parse_conditional(){
             parse_conditional();
         }
     }
+    
+    else
+    {
+        syntax_error("INVALID_COND_OPERATOR");
+    }
 }
 
 function parse_comparison_operator(){
@@ -334,11 +446,11 @@ function parse_comparison_operator(){
                 break;
             case "GREATER_THAN_EQUAL": expect("GREATER_THAN_EQUAL");
                 break;
-            default: syntax_error();
+            default: syntax_error("INVALID_COMP_OPERATOR");
                 break;
         }
     }else
-        syntax_error();
+        syntax_error("INVALID_COMP_OPERATOR");
 }
 
 function parse_comparison_link(){
@@ -350,11 +462,11 @@ function parse_comparison_link(){
                 break;
             case "OR": expect("OR");
                 break;
-            default: syntax_error();
+            default: syntax_error("INVALID_LINK");
                 break;
         }
     }else
-        syntax_error();
+        syntax_error("INVALID_LINK");
 }
 
 function parse_for_stmt(){
@@ -379,7 +491,7 @@ function parse_for_stmt(){
             break;
         case "ID":
             break;
-        default: syntax_error();
+        default: syntax_error("INVALID_RANGE");
             break;
     }
 }
@@ -420,7 +532,7 @@ function parse_assign_stmt(){
                 //case String TODO
                 case "INPUT": parse_input_stmt();
                     break;
-                default: syntax_error();
+                default: syntax_error("INVALID_RHS");
                     break;
             }
         }
@@ -432,7 +544,7 @@ function parse_assign_stmt(){
     }else if(token.type === "END_OF_LINE" || token.type === "SEMICOLON"){ //end of assign stmt recursion expected
         //do nothing
     }else
-        syntax_error();
+        syntax_error("INVALID_ASSIGNMENT");
 }
 
 function parse_multi_val_assign_stmt(){ //a,b,c,d = 1,2,3,4
@@ -444,24 +556,33 @@ function parse_multi_val_assign_stmt(){ //a,b,c,d = 1,2,3,4
         var applicable = ["FLOAT","NUMBER","ID", "TRUE", "FALSE"];  
         if(applicable.includes(token.type)){
             parse_expr();
-        }else{
-            syntax_error();
         }
-    }else if(token.type === "COMMA"){
+        else
+        {
+            syntax_error("INVALID_ASSIGNMENT");
+        }
+    }
+    else if(token.type === "COMMA"){
         expect("COMMA");
         parse_multi_val_assign_stmt();
         token = peek();
-        if(token.type === "COMMA"){
+        if(token.type === "COMMA")
+        {
             expect("COMMA");
             token = peek();
             var applicable = ["FLOAT","NUMBER","ID", "TRUE", "FALSE"];
-            if(applicable.includes(token.type)){
+            if(applicable.includes(token.type))
+            {
                 parse_expr();
-            }else{
-                syntax_error();
             }
-        }else{
-            syntax_error();
+            else
+            {
+                syntax_error("INVALID_ASSIGNMENT");
+            }
+        }
+        else
+        {
+            syntax_error("INVALID_ASSIGNMENT");
         }
     }
 }
@@ -481,11 +602,11 @@ function parse_assign_op(){
                 break;
             case "MOD_ASSIGN": expect("MOD_ASSIGN");
                 break;
-            default: syntax_error();
+            default: syntax_error("INVALID_ASSIGN_OPERATOR");
                 break;
         }
     }else
-            syntax_error();
+            syntax_error("INVALID_ASSIGN_OPERATOR");
 }
 
 function parse_primary(){
@@ -503,11 +624,11 @@ function parse_primary(){
                 break;
             case "FALSE": expect("FALSE");
                 break;
-            default: syntax_error();
+            default: syntax_error("INVALID_PRIMARY");
                 break;
         }
     }else{
-        syntax_error();
+        syntax_error("INVALID_PRIMARY");
     }
 }
 
@@ -529,7 +650,8 @@ function parse_tuple(){
 
 function parse_expr(){
     var token = peek();
-    if(token.type === "ID"){
+    if(token.type === "ID")
+    {
         expect("ID");
         var token2 = peek();
         if(token2.type === "PERIOD"){//Used in case of a function, in this case we only have the format function
@@ -537,23 +659,30 @@ function parse_expr(){
             if(token2.type === "FORMAT"){ //In case of print(a.format())
                 program = ungetToken(program, token);
                 parse_format_function();
-            }else{
+            }
+            else
+            {
                 //Currently no other functions supported
                 //So throw error
-                syntax_error();
+                syntax_error("NON_FORMAT_ERROR");
             }
         }
         //otherwise just parse the ID primary and continue parsing potential expression
-    }else{
+    }
+    else
+    {
         parse_primary();
     }
     token = peek();
     var operations = ["PLUS", "MINUS", "MULT", "DIV", "MOD", "EXPO", "IN", "NOTIN", "IS", "ISNOT"];
     var compare_ops = ["COMPARE_EQUALS", "NOT_EQUAL", "LESS_THAN", "LESS_THAN_EQUAL", "GREATER_THAN", "GREATER_THAN_EQUAL"];
-    if(operations.includes(token.type)){
+    if(operations.includes(token.type))
+    {
         parse_op();
         parse_expr();
-    }else if(compare_ops.includes(token.type)){
+    }
+    else if(compare_ops.includes(token.type))
+    {
         parse_comparison_operator();
         parse_expr();
     }//else do nothing
@@ -582,7 +711,7 @@ function parse_op(){
             break;
         case "ISNOT": expect("ISNOT");
             break;
-        default: syntax_error();
+        default: syntax_error("INVALID_OPERATOR");
             break;
     }
 }
@@ -601,10 +730,13 @@ function parse_print_stmt(){
         case "FALSE":
             parse_print_multi_val();
             token = peek();
-            if(token.type === "RPAREN"){
+            if(token.type === "RPAREN")
+            {
                 expect("RPAREN");
-            }else{
-                syntax_error();
+            }
+            else
+            {
+                syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
             }
             break;
     }
@@ -659,14 +791,21 @@ function parse_format_function(){
                        if(token.type === "RPAREN"){//asd.format(a=5,)
                            expect("RPAREN");
                        }
-                   }else{
-                       if(token.type === "RPAREN"){//asd.format(a=5)
+                   }
+                   else
+                   {
+                       if(token.type === "RPAREN")
+                       {//asd.format(a=5)
                            expect("RPAREN");
-                       }else{
-                           syntax_error();
+                       }
+                       else
+                       {
+                           syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
                        }
                    }
-               }else{//asd.format(primary/expression, ...)
+               }
+               else
+               {//asd.format(primary/expression, ...)
                    parse_expr();
                    parameterCount++;
                    token = peek();
@@ -676,16 +815,24 @@ function parse_format_function(){
                        if(token.type === "RPAREN"){//asd.format(primary/expression, ... , primary/expression,)
                            expect("RPAREN");
                        }
-                   }else{
-                       if(token.type === "RPAREN"){ //asd.format(primary/expression, ... , primary/expression)
+                   }
+                   else
+                   {
+                       if(token.type === "RPAREN")
+                       { //asd.format(primary/expression, ... , primary/expression)
                            expect("RPAREN");
-                       }else{
-                           syntax_error();
+                       }
+                       else
+                       {
+                           syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
                        }
                    }
                }
-           }else{//Only named paramters can appear after they've been used once
-               if(token.type === "ID" && token2.type === "ASSIGN_EQUALS"){ //asd.format(..., a=5, b=6, variable=...)
+           }
+           else
+           {//Only named paramters can appear after they've been used once
+               if(token.type === "ID" && token2.type === "ASSIGN_EQUALS")
+               { //asd.format(..., a=5, b=6, variable=...)
                    expect("ID");
                    expect("ASSIGN_EQUALS");
                    parse_expr();
@@ -701,11 +848,13 @@ function parse_format_function(){
                        if(token.type === "RPAREN"){//asd.format(a=5, b=6, ... , z=10)
                            expect("RPAREN");
                        }else{
-                           syntax_error();
+                           syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
                        }
                    }
-               }else{//There was a violation as only the named format can be used now.
-                   syntax_error();
+               }
+               else
+               {//There was a violation as only the named format can be used now.
+                   syntax_error("ERROR_FORMAT_VIOLATION");
                    break;
                }
            }
@@ -765,10 +914,14 @@ function parse_input_stmt(){
     var primaries = ["FLOAT","NUMBER","ID", "TRUE", "FALSE"];
     if(token.type === "RPAREN"){
         expect("RPAREN");
-    }else if(primaries.includes(token.type)){
+    }
+    else if(primaries.includes(token.type))
+    {
         parse_expr();
         expect("RPAREN");
-    }else{
-        syntax_error();
+    }
+    else
+    {
+        syntax_error("INVALID_INPUT");
     }
 }
