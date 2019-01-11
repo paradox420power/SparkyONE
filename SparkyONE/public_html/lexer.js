@@ -176,6 +176,47 @@ function readWord(input){
     return lexeme;
 }
 
+function readString(input){
+    var lexeme = {
+        id:"\"", //the exact input from the string
+        type:"QUOTE", //what the token is classified as
+        line_no: code_line, //what line of code the token is on
+        length: 1 //used to remove the lexeme including preceding spaces from input string upon return
+    };
+    
+    var charCheck = "";
+    var charCheckIndex = 1;
+    var valid_printables = /^[\s*\w*]$/; // "/.*\n*/" will need to be implemented eventually
+    var incomplete = true;
+    
+    while(incomplete){ //will continue to loop while the string is unfinished
+        if(charCheckIndex < input.length){
+            charCheck = input.charAt(charCheckIndex);
+            if(charCheck.match(valid_printables)){
+                lexeme.id += charCheck;
+                charCheckIndex++; //increment to next char index
+            }else{
+                if(charCheck === "\""){ //checks if next character is an acceptable follow to the varaible
+                    incomplete = false; //we hit the next space
+                    lexeme.id += "\""; //unget that last index since it is next in sequence
+                    lexeme.type = "STRING";
+                }else{
+                    lexeme.id = "Error";
+                    lexeme.type = "Error";
+                    incomplete = false;
+                }
+            }
+        }else{
+            incomplete = false;
+            charCheckIndex--;
+        }
+
+        lexeme.length = charCheckIndex + 1; //since charIndex started at 1, the returned length of the variable is the +1
+    }
+    
+    return lexeme;
+}
+
 /*calling getToken reads character by character against valid inputs & will return the exact input
  * as lexeme.id, the token type as lexeme.type, what line it was encountered on as lexeme.line_no,
  * and the length of the input which will be should be removed from the input after return (i.e. call input.slice(length))
@@ -188,7 +229,7 @@ function getToken(input){
         length: 0 //used to remove the lexeme including preceding spaces from input string upon return
     };
     
-    /*["=", "+", "-", "*", "/", "%", "<", ">", ":", ";",
+    /*["=", "+", "-", "*", "/", "%", "^", "<", ">", ":", ";",
     "(", ")", "[", "]", "{", "}", ",", ".", "\"", "\'", "\\", " ", "\n"];*/
     
     if(input !== null || input !== ""){
@@ -216,35 +257,54 @@ function getToken(input){
                     lexeme.length++;
                 }else if(input.charAt(1) === "="){
                     lexeme.id = "-=";
-                    lexeme.type = "SUBTRACT_ASSIGN";
+                    lexeme.type = "SUB_ASSIGN";
                     lexeme.length++;
                 }else{
                     lexeme.id = "-";
-                    lexeme.type = "PLUS";
+                    lexeme.type = "MINUS";
                 }
                 break;
             case "*":
-                lexeme.id = "*";
-                lexeme.type = "MULTIPLY";
                 lexeme.length++;
+                if(input.charAt(1) === "="){
+                    lexeme.length++;
+                    lexeme.id = "*=";
+                    lexeme.type = "MULT_ASSIGN";
+                }else{
+                    lexeme.id = "*";
+                    lexeme.type = "MULT";
+                }
                 break;
             case "/":
-                lexeme.id = "/";
-                lexeme.type = "DIVIDE";
                 lexeme.length++;
+                if(input.charAt(1) === "="){
+                    lexeme.length++;
+                    lexeme.id = "/=";
+                    lexeme.type = "DIV_ASSIGN";
+                }else{
+                    lexeme.id = "/";
+                    lexeme.type = "DIV";
+                }
                 break;
             case "%":
-                lexeme.id = "%";
-                lexeme.type = "MODULO";
+                lexeme.length++;
+                if(input.charAt(1) === "="){
+                    lexeme.length++;
+                    lexeme.id = "%=";
+                    lexeme.type = "MOD_ASSIGN";
+                }else{
+                    lexeme.id = "%";
+                    lexeme.type = "MOD";
+                }
+                break;
+            case "^":
+                lexeme.id = "^";
+                lexeme.type = "EXPO";
                 lexeme.length++;
                 break;
             case "<":
                 lexeme.length++;
-                if(input.charAt(1) === ">"){
-                    lexeme.id = "<>";
-                    lexeme.type = "NOT_EQUAL";
-                    lexeme.length++;
-                }else if(input.charAt(1) === "="){
+                if(input.charAt(1) === "="){
                     lexeme.id = "<=";
                     lexeme.type = "LESS_THAN_EQUAL";
                     lexeme.length++;
@@ -274,6 +334,18 @@ function getToken(input){
                     lexeme.id = "=";
                     lexeme.type = "ASSIGN_EQUALS";
                 }
+                break;
+            case "!":
+                    lexeme.length++;
+                    if(input.charAt(1) === "="){
+                        lexeme.id = "!=";
+                        lexeme.type = "NOT_EQUAL"; //May want to get rid of <> case altogether as its deprecated
+                        lexeme.length++;
+                    }else{
+                        lexeme.id = "error";
+                        lexeme.type = "unchecked symbol";
+                        lexeme.length++;
+                    }
                 break;
             case ":":
                 lexeme.id = ":";
@@ -326,9 +398,15 @@ function getToken(input){
                 lexeme.length++;
                 break;
             case "\\":
-                lexeme.id = "\\";
-                lexeme.type = "ESCAPE_SLASH";
                 lexeme.length++;
+                if(input.charAt(1) === "\""){
+                    lexeme.length++;
+                    lexeme.id = "\\\"";
+                    lexeme.type = "ESCAPE_QUOTE";
+                }else{
+                    lexeme.id = "\\";
+                    lexeme.type = "ESCAPE_SLASH";
+                }
                 break;
             case ",":
                 lexeme.id = ",";
@@ -350,6 +428,11 @@ function getToken(input){
             case "\n":
                 lexeme.id = "line_break";
                 lexeme.type = "END_OF_LINE";
+                lexeme.length++;
+                break;
+            case "#":
+                lexeme.id = "#";
+                lexeme.type = "HASH_TAG";
                 lexeme.length++;
                 break;
             default:

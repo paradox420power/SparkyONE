@@ -7,25 +7,26 @@
 
 
 function main(){
+    //var input = prompt("INPUT:")
+    
     var input =
 "\
 \n\
-\n\
-\n\
-if    a ==  a:\n\
-FAKE_ASSIGN_STATEMENT\n\
-else true:\n\
-";
+if      a      == a:\n\
+    a+=3\n\
+else:\n\
+    a+=3";
     var lexeme;
     
     document.write(input + "<br><br>");
     
-    parse_begin_program(input);
+   parse_begin_program(input);
     
     /*while(input.length > 0){
         lexeme = getToken(input);
         input = input.slice(lexeme.length);
-        document.write("ID: " + lexeme.id + ", Type: " + lexeme.type + ", Length: " + lexeme.length + ", Line: " + lexeme.line_no + "<br><br>");
+        //if(lexeme.type !== "SPACE")
+            document.write("ID: " + lexeme.id + ", Type: " + lexeme.type + ", Length: " + lexeme.length + ", Line: " + lexeme.line_no + "<br><br>");
     }*/
     document.write("END_OF_FILE");
 }
