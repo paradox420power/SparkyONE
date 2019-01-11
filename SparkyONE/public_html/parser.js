@@ -1,7 +1,7 @@
 //added INPUT in bgnTokens for testing purposes for now
 var bgnTokens = ["IMPORT", "IF", "FOR", "WHILE", "ID", "PRINT", "INPUT"];
 var program = "";
-var indent_stack = [];
+var indent_stack = [0];
 
 //print parsing error
 function error_expected_not_matching(expected, received, line_no){
@@ -25,19 +25,19 @@ function skipSpaces(){
 
 function check_indents(){
     var token = getToken(program);
-    if(indent_stack.length !== 1){
+    if(indent_stack.length !== 0){
         var current = indent_stack.pop();
-        //document.write("Current: " + current + "<br>");
+        document.write("Indent length is " + current + " and we read " + token.length + " at line " +token.line_no+ "<br>");
         if(token.type === "SPACE"){
             if(token.length > current){
                 //unexpected indent
                 indent_stack = [];
                 indent_stack.push(0);
-                //document.write("index syntax error at line " + token.line_no + "<br>Current: " + current + " TabLength: " + token.length + "<br>");
+                document.write("index syntax error at line " + token.line_no + "<br>Current: " + current + " TabLength: " + token.length + "<br>");
                 syntax_error();
             } else if(token.length < current){
                 //posible dedent
-                //document.write("Popping: " + current + "<br>");
+                document.write("Popping: " + current + "<br>");
                 check_indents();
             } else if(token.length === current){
                 //matching indent
@@ -59,20 +59,25 @@ function increase_indent(){
         } else {
             indent_stack.push(current);
             indent_stack.push(token.length);
-            //document.write("Token: " + token.type + " adding " + token.length + " to stack at line " + token.line_no + "<br>");
+            document.write("Token: " + token.type + " adding " + token.length + " to stack at line " + token.line_no + "<br>");
         }
     }
 }
 
-//TO DO
-//Consider using saveSpaces as a way to help with the potential danger of peek_2_ahead
-//used to save potentially useful spaces
-/*function saveSpaces(){
+
+function saveSpaces(){
     var token = getToken(program);
     if(token.type === "SPACE"){
-        return token.id;
+        return token.length;
     }
-}*/
+}
+
+function returnHeldSpaces(spaces){
+    allSpaces = "";
+    for(x = 0; x < spaces; x++)
+        allSpaces += " ";
+    program = allSpaces + program;
+}
 
 //reads & returns next token, ignoring spaces
 function peek(){
@@ -104,7 +109,7 @@ function expect(tokenType){
             //check correct indents (stack issue)
             //check_indents();
         }
-        document.write(token.type + " read at line " + token.line_no + "<br>"); //comment this out when not trouble shooting
+        //document.write(token.type + " read at line " + token.line_no + "<br>"); //comment this out when not trouble shooting
     }else{
         program = program.slice(token.length); //unnecessary to slice since an error is thrown
         error_expected_not_matching(tokenType, token.type, token.line_no);
@@ -199,30 +204,6 @@ function parse_program(){
     }
 }
 
-function parse_function_full(){
-    //we aren't handling function calls
-}
-
-/*function parse_function_def(){
-    
-}
-function parse_parameter_list(){
-    
-}
-function parse_parameter(){
-    
-}*/
-
-/*function parse_new_body(){
-    
-}
-function parse_body(){
-    
-}
-function parse_body_no_indent(){
-    
-}*/
-
 function parse_stmt_list(){
     parse_stmt();
     var token = peek();
@@ -237,9 +218,12 @@ function parse_stmt_list(){
         }
     }
     var stmt_Starts = ["IF", "FOR" , "WHILE", "ID", "PRINT"];
+    var spaceCount = saveSpaces(); //need to be held on to for indent stack purposes
     token = peek();
+    returnHeldSpaces(spaceCount); //now that we've peeked the next token we reutnr the spaces
     if(stmt_Starts.includes(token.type)) //this stmt is followed by a statement
         parse_stmt_list();
+    
 }
 
 function parse_stmt(){
@@ -286,6 +270,7 @@ function parse_else_stmt(){
         parse_conditional();
         expect("COLON");
         expect("END_OF_LINE");
+        increase_indent();
         parse_stmt_list();
         parse_else_stmt();
     }else if (token.type === "ELSE"){
@@ -293,6 +278,7 @@ function parse_else_stmt(){
         //parse_conditional();
         expect("COLON");
         expect("END_OF_LINE");
+        increase_indent();
         parse_stmt_list();
     }//else do nothing, no else detected
 }
