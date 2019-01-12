@@ -125,31 +125,32 @@ function skipSpaces(){
     //else do nothing
 }
 
+// Checks current token with indent_stack for dedent and unexpected indentation
 function check_indents(){
     var token = getToken(program);
     if(indent_stack.length !== 1){
         var current = indent_stack.pop();
-        document.write("Current: " + current + "<br>");
+        if(token.length > current){
+            //unexpected indent
+            indent_stack = [];
+            indent_stack.push(0);
+            //document.write("index syntax error at line " + token.line_no + "<br>Current: " + current + " TabLength: " + token.length + "<br>");
+            syntax_error("INDENTATION_ERROR");
+        } else if(token.length < current){
+            //posible dedent
+            //document.write("Popping: " + current + "<br>");
+            //document.write(indent_stack.toString() + "<br>");
+            check_indents();
+        } else if(token.length === current){
+            //matching indent
+            program = program.slice(token.length);
+            indent_stack.push(current);
+        }
+    } else {
         if(token.type === "SPACE"){
-            if(token.length > current){
-                //unexpected indent
-                indent_stack = [];
-                indent_stack.push(0);
-                document.write("index syntax error at line " + token.line_no + "<br>Current: " + current + " TabLength: " + token.length + "<br>");
-                syntax_error("INDENTATION_ERROR");
-            } else if(token.length < current){
-                //posible dedent
-                document.write("Popping: " + current + "<br>");
-                check_indents();
-            } else if(token.length === current){
-                //matching indent
-                program = program.slice(token.length);
-                indent_stack.push(current);
-            }
+            syntax_error("INDENTATION_ERROR");
         }
     }
-    
-    
 }
 
 function increase_indent(){
@@ -161,7 +162,7 @@ function increase_indent(){
         } else {
             indent_stack.push(current);
             indent_stack.push(token.length);
-            document.write("Token: " + token.type + " adding " + token.length + " to stack at line " + token.line_no + "<br>");
+            //document.write("Token: " + token.type + " adding " + token.length + " to stack at line " + token.line_no + "<br>");
         }
     }
 }
@@ -169,12 +170,19 @@ function increase_indent(){
 //TO DO
 //Consider using saveSpaces as a way to help with the potential danger of peek_2_ahead
 //used to save potentially useful spaces
-/*function saveSpaces(){
+function saveSpaces(){
     var token = getToken(program);
     if(token.type === "SPACE"){
-        return token.id;
+        return token.length;
     }
-}*/
+}
+
+function returnHeldSpaces(spaces){
+    allSpaces = "";
+    for(x = 0; x < spaces; x++)
+        allSpaces += " ";
+    program = allSpaces + program;
+}
 
 //reads & returns next token, ignoring spaces
 function peek(){
@@ -247,6 +255,7 @@ function parse_begin_program(input){
     exit();*/
     
     program = input;
+    indent_stack.push(0);
     var token = peek();
     //TO DO
     //Could just call read empty lines directly instead 
@@ -348,7 +357,9 @@ function parse_stmt_list(){
         }
     }
     var stmt_Starts = ["IF", "FOR" , "WHILE", "ID", "PRINT"];
+    var spaceCount = saveSpaces(); //need to be held on to for indent stack purposes
     token = peek();
+    returnHeldSpaces(spaceCount); //now that we've peeked the next token we reutnr the spaces
     if(stmt_Starts.includes(token.type)) //this stmt is followed by a statement
         parse_stmt_list();
 }
@@ -479,17 +490,50 @@ function parse_for_stmt(){
             expect("RANGE");
             expect("LPAREN");
             expect("NUMBER");
+            token = peek();
+            if(token.type === "RPAREN"){
+                // only one number within parenthesis
+                expect("RPAREN");
+                expect("COLON");
+                expect("END_OF_LINE");
+                increase_indent();
+                parse_stmt_list();
+                break;
+            }
+            expect("COMMA");
+            expect("NUMBER");
+            token = peek();
+            if(token.type === "RPAREN"){
+                // two numbers seperated by a colon
+                expect("RPAREN");
+                expect("COLON");
+                expect("END_OF_LINE");
+                increase_indent();
+                parse_stmt_list();
+                break;
+            }
+            // three numbers should be no more
             expect("COMMA");
             expect("NUMBER");
             expect("RPAREN");
             expect("COLON");
-            parse_new_body();
-            break;
-        case "XRANGE":
-            break;
-        case "MY_RANGE":
+            expect("END_OF_LINE");
+            increase_indent();
+            parse_stmt_list();
             break;
         case "ID":
+            expect("ID");
+            token = peek();
+            if (token.type === "LBRACE"){
+                //Loop over a slice copy of the entire list
+                expect("LBRACE");
+                expect("COLON");
+                expect("RBRACE");
+            }
+            expect("COLON");
+            expect("END_OF_LINE");
+            increase_indent();
+            parse_stmt_list();
             break;
         default: syntax_error("INVALID_RANGE");
             break;
@@ -497,7 +541,12 @@ function parse_for_stmt(){
 }
 
 function parse_while_stmt(){
-    
+    expect("WHILE");
+    parse_conditional();
+    expect("COLON");
+    expect("END_OF_LINE");
+    increase_indent();
+    parse_stmt_list();
 }
 
 function parse_assign_stmt(){
