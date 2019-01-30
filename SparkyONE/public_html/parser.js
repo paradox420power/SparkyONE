@@ -1,5 +1,5 @@
 //added INPUT in bgnTokens for testing purposes for now
-var bgnTokens = ["IMPORT", "IF", "FOR", "WHILE", "ID", "PRINT", "INPUT"];
+var bgnTokens = ["IMPORT", "IF", "FOR", "WHILE", "ID", "PRINT", "INPUT", "HASH_TAG"];
 var program = "";
 var indent_stack = [];
 
@@ -9,104 +9,55 @@ function error_expected_not_matching(expected, received, line_no){
 }
 
 function syntax_error(errorType){
-    if (errorType === "UNKNOWN_SYMBOL")
-    {
+    if (errorType === "UNKNOWN_SYMBOL"){
         alert("Program contains unknown symbols!");
         exit();
-    }
-    
-    else if (errorType === "INVALID_STATEMENT")
-    {
+    }else if (errorType === "INVALID_STATEMENT"){
         alert("Invalid statement!");
         exit();
-    }
-    
-    else if (errorType === "INDENTATION_ERROR")
-    {
+    }else if (errorType === "INDENTATION_ERROR"){
         alert("Indentation error detected!");
         exit();
-    }
-    
-    else if (errorType === "INVALID_COND_OPERATOR")
-    {
+    }else if (errorType === "INVALID_COND_OPERATOR"){
         alert("Invalid conditional operator!");
         exit();
-    }
-    
-    else if (errorType === "INVALID_COMP_OPERATOR")
-    {
+    }else if (errorType === "INVALID_COMP_OPERATOR"){
         alert("Invalid comparison operator!");
         exit();
-    }
-    
-    else if (errorType === "INVALID_LINK")
-    {
+    }else if (errorType === "INVALID_LINK"){
         alert("Invalid comparison link!");
         exit();
-    }
-    
-    else if (errorType === "INVALID_RANGE")
-    {
+    }else if (errorType === "INVALID_RANGE"){
         alert("Invalid ranged specified!");
         exit();
-    }
-    
-    else if (errorType === "INVALID_RHS")
-    {
+    }else if (errorType === "INVALID_RHS"){
         alert("Invalif right-hand side value/variable");
         exit();
-    }
-    
-    else if (errorType === "INVALID_ASSIGNMENT")
-    {
+    }else if (errorType === "INVALID_ASSIGNMENT"){
         alert("Invalid assignment operation!");
         exit();
-    }
-    
-    else if (errorType === "INVALID_ASSIGN_OPERATOR")
-    {
+    }else if (errorType === "INVALID_ASSIGN_OPERATOR"){
         alert("Invalid assignment operator!");
         exit();
-    }
-    
-    else if (errorType === "INVALID_PRIMARY")
-    {
+    }else if (errorType === "INVALID_PRIMARY"){
         alert("Invalid primary type!");
         exit();
-    }
-    
-    else if (errorType === "NON_FORMAT_ERROR")
-    {
+    }else if (errorType === "NON_FORMAT_ERROR"){
         alert("Only format() allowed!");
         exit();
-    }
-    
-    else if (errorType === "INVALID_OPERATOR")
-    {
+    }else if (errorType === "INVALID_OPERATOR"){
         alert("Invalid arithmetic operator!");
         exit();
-    }
-    
-    else if (errorType === "ERROR_MISSING_RIGHT_PARENTHESIS")
-    {
+    }else if (errorType === "ERROR_MISSING_RIGHT_PARENTHESIS"){
         alert("Expecting right parenthesis!");
         exit();
-    }
-    
-    else if (errorType === "ERROR_FORMAT_VIOLATION")
-    {
+    }else if (errorType === "ERROR_FORMAT_VIOLATION"){
         alert("format() violation detected!");
         exit();
-    }
-    
-    else if (errorType === "INVALID_INPUT")
-    {
+    }else if (errorType === "INVALID_INPUT"){
         alert("Invalid input!");
         exit();
-    }
-    
-    else
-    {
+    }else{
         //document.write("Unspecified Error<br>");
         alert("Unspecified Error");
         exit();
@@ -136,17 +87,17 @@ function check_indents(){
             indent_stack.push(0);
             //document.write("index syntax error at line " + token.line_no + "<br>Current: " + current + " TabLength: " + token.length + "<br>");
             syntax_error("INDENTATION_ERROR");
-        } else if(token.length < current){
+        }else if(token.length < current){
             //posible dedent
             //document.write("Popping: " + current + "<br>");
             //document.write(indent_stack.toString() + "<br>");
             check_indents();
-        } else if(token.length === current){
+        }else if(token.length === current){
             //matching indent
             program = program.slice(token.length);
             indent_stack.push(current);
         }
-    } else {
+    }else{
         if(token.type === "SPACE"){
             syntax_error("INDENTATION_ERROR");
         }
@@ -159,7 +110,7 @@ function increase_indent(){
         current = indent_stack.pop();
         if(current === token.length){
             indent_stack.push(current);
-        } else {
+        }else{
             indent_stack.push(current);
             indent_stack.push(token.length);
             //document.write("Token: " + token.type + " adding " + token.length + " to stack at line " + token.line_no + "<br>");
@@ -230,17 +181,18 @@ function readEmptyLines(){
     if(token.type === "SPACE"){
         program = program.slice(token.length); //slice off the spaces
         token2 = getToken(program);
-        if(token2.type === "END_OF_LINE") //if next is line break, its ok
+        if(token2.type === "END_OF_LINE"){ //if next is line break, its ok
             readEmptyLines();
-        else //some keyword was read & the spaces could be indent that need to be read
+        }else{ //some keyword was read & the spaces could be indent that need to be read
             if(token.type === "SPACE"){
                 for(i = 0; i < token.length; i++){
                     program = " " + program;
                 }
                 //increase_indent();
-            } else {
+            }else{
                 program = token.id + "" + program; //add spliced id back to front of program
             }
+        }
     }else if(token.type === "END_OF_LINE"){
         program = program.slice(token.length);
         incrementCodeLine();
@@ -257,12 +209,12 @@ function parse_begin_program(input){
     program = input;
     indent_stack.push(0);
     var token = peek();
-    //TO DO
-    //Could just call read empty lines directly instead 
     if(token.type === "END_OF_LINE")
         expect("END_OF_LINE"); //this will precede to read all empty lines
     token = peek();
     if(bgnTokens.includes(token.type)){
+        //TO DO
+        //address the unnecessary if statement below as it should just be included in parse_program
         if(token.type === "IMPORT")
             parse_import_list();
         var token = peek(); //if above if doesn't run this just peeks the same token
@@ -277,25 +229,35 @@ function parse_begin_program(input){
     
 }
 
+//TO DO
+//Update other functions to include import as a possibility
+//See if this function is even truly necessary, as it does not seem to be
 function parse_import_list(){
     parse_import_stmt();
     var token = peek();
-    if(token.type === "IMPORT")
+    if(token.type === "IMPORT"){
         parse_import_list();
+    }
 }
 
+//TO DO
+//Update other functions to include import as a possibility
+//Also update this function as some of it may be unnecessary given parse_stmt_list has changed overtime
 function parse_import_stmt(){
     expect("IMPORT");
     expect("ID");
     var token = peek();
+    //TO DO cont.
+    //I believe the below if statement is a portion that can be safely deleted.
     if(token.type !== "END_OF_FILE"){ //some statements are the end of the program & won't have a line break
-        if(token.type === "END_OF_LINE")
+        if(token.type === "END_OF_LINE"){
             expect("END_OF_LINE");
-        else{
+        }else{
             expect("SEMICOLON"); //this will throw error if invalid follow-up read
             token = peek(); //sometimes a semicolon is followed by a line break
-            if(token.type === "END_OF_LINE")
+            if(token.type === "END_OF_LINE"){
                 expect("END_OF_LINE");
+            }
         }
     }
 }
@@ -303,10 +265,11 @@ function parse_import_stmt(){
 function parse_program(){
     var token = peek();
     if(bgnTokens.includes(token.type)){
-        if(token.type === "DEF")
+        if(token.type === "DEF"){
             parse_function_full(); //won't actully be implemented
-        else
+        }else{
             parse_stmt_list();
+        }
         token = peek();
         if(token.type !== "END_OF_FILE")
             parse_program();
@@ -347,21 +310,22 @@ function parse_stmt_list(){
     parse_stmt();
     var token = peek();
     if(token.type !== "END_OF_FILE"){//some statements are the end of the program & won't have a line break
-        if(token.type === "END_OF_LINE")
+        if(token.type === "END_OF_LINE"){
             expect("END_OF_LINE");
-        else if(token.type === "SEMICOLON"){
+        }else if(token.type === "SEMICOLON"){
             expect("SEMICOLON");
             token = peek(); //sometimes a semicolon is followed by a line break
             if(token.type === "END_OF_LINE")
                 expect("END_OF_LINE");
         }
     }
-    var stmt_Starts = ["IF", "FOR" , "WHILE", "ID", "PRINT"];
+    var stmt_Starts = ["IF", "FOR" , "WHILE", "ID", "PRINT", "INPUT", "IMPORT", "HASH_TAG"];
     var spaceCount = saveSpaces(); //need to be held on to for indent stack purposes
     token = peek();
     returnHeldSpaces(spaceCount); //now that we've peeked the next token we reutnr the spaces
-    if(stmt_Starts.includes(token.type)) //this stmt is followed by a statement
+    if(stmt_Starts.includes(token.type)){ //this stmt is followed by a statement
         parse_stmt_list();
+    }
 }
 
 function parse_stmt(){
@@ -384,7 +348,11 @@ function parse_stmt(){
             //Reads a line from input, but wouldn't set it to anything.
             case "INPUT": parse_input_stmt();
                 break;
-                //add comment stmt check
+            //TO DO
+            //add comment_stmt check
+            //add import_stmt check
+            case "HASH_TAG": parse_comment();
+                break;
             default: syntax_error("INVALID_STATEMENT");
                 break;
         }
@@ -428,14 +396,11 @@ function parse_conditional(){
         parse_primary();
         token = peek();
         var link_ops = ["AND", "OR"];
-        if(link_ops.includes(token.type) ){
+        if(link_ops.includes(token.type)){
             parse_comparison_link();
             parse_conditional();
         }
-    }
-    
-    else
-    {
+    }else{
         syntax_error("INVALID_COND_OPERATOR");
     }
 }
@@ -460,8 +425,9 @@ function parse_comparison_operator(){
             default: syntax_error("INVALID_COMP_OPERATOR");
                 break;
         }
-    }else
+    }else{
         syntax_error("INVALID_COMP_OPERATOR");
+    }
 }
 
 function parse_comparison_link(){
@@ -476,8 +442,9 @@ function parse_comparison_link(){
             default: syntax_error("INVALID_LINK");
                 break;
         }
-    }else
+    }else{
         syntax_error("INVALID_LINK");
+    }
 }
 
 function parse_for_stmt(){
@@ -549,6 +516,10 @@ function parse_while_stmt(){
     parse_stmt_list();
 }
 
+//TO DO
+//Consider how to handle this tuple case: t = (1,2,3); a,b,c = t;
+//Might need to add a case in parse_multi_val_assign_stmt(); to accomdate.
+//That, or find a way to differentiate between the two.
 function parse_assign_stmt(){
     var multi_token = peek(); //used in the case we need to unget the ID, for the multi_val_assign_stmt
     expect("ID");
@@ -558,27 +529,49 @@ function parse_assign_stmt(){
         parse_assign_op();
         token = peek();
         parse_expr();
-    }else if(token.type === "ASSIGN_EQUALS"){ // simply assigning, but could be a multi assign statement
+    }else if(token.type === "ASSIGN_EQUALS"){ //simply assigning, but could be a multi assign statement
         expect("ASSIGN_EQUALS");
         token = peek();
         var token2 = peek_2_ahead();
         if(token.type === "ID"){
             if(token2.type === "ASSIGN_EQUALS" || token2.type === "END_OF_LINE" || token2.type === "SEMICOLON"){ //2nd tokens indicative of an assign stmt
                 parse_assign_stmt();
-            }else //else an id should be a primary/expression
+            }else{ //else an id should be a primary/expression
                 parse_expr();
+                //TO DO
+                //Maybe a while loop to account for commas being used to create a tuple that doesn't utilize paranthesis
+                token = peek();
+                while(token.type === "COMMA"){
+                    expect("COMMA");
+                    parse_expr();
+                    token = peek();
+                }
+            }
         }else{
+            //TO DO
+            //Consider consolidating tuples and list parsing into just parse_expr now that it includes them.
             switch(token.type){
+                case "LPAREN":
+                case "LBRACE":
                 case "NUMBER":
                 case "FLOAT":
                 case "TRUE":
-                case "FALSE": parse_expr();
+                case "FALSE":
+                case "APOSTROPHE":
+                case "QUOTE": 
+                    parse_expr();
+                    token = peek();
+                    while(token.type === "COMMA"){//Used for potential tuple creation
+                        expect("COMMA");
+                        var token2 = peek();
+                        if(token2.type !== "END_OF_LINE" && token2.type !== "SEMICOLON" && token2.type !== "END_OF_FILE"){
+                            parse_expr();
+                            token = peek();
+                        }else{
+                            token = peek();
+                        }
+                    }
                     break;
-                case "LPAREN": parse_tuple();
-                    break;
-                case "LBRACE": parse_list();
-                    break;
-                //case String TODO
                 case "INPUT": parse_input_stmt();
                     break;
                 default: syntax_error("INVALID_RHS");
@@ -586,51 +579,59 @@ function parse_assign_stmt(){
             }
         }
     }else if(token.type === "COMMA"){ //a,b,c,d = 1,2,3,4
+        //TO DO
+        //Account for tuple assignment
         program = ungetToken(program, multi_token);
         parse_multi_val_assign_stmt();      
-    }else if(token.type === "PERIOD"){ //function call
+    }else if(token.type === "PERIOD"){ //TO DO: function call
         
     }else if(token.type === "END_OF_LINE" || token.type === "SEMICOLON"){ //end of assign stmt recursion expected
         //do nothing
-    }else
+    }else{
         syntax_error("INVALID_ASSIGNMENT");
+    }
 }
 
+//TO DO
+//Consider how to handle this tuple case: t = (1,2,3); a,b,c = t; a,b,c = (1,2,3)
+//Might need to add a case in parse_multi_val_assign_stmt(); to accomdate.
+//That, or find a way to differentiate between the two.
 function parse_multi_val_assign_stmt(){ //a,b,c,d = 1,2,3,4
     expect("ID");
+    //TO DO cont.
+    //This is most likely a syntax error.
+    //This function will likely need a parameter to count the number of variables being set
+    //and compare that to the number of values being used to set those variables.
+    //Could return a value denoting whether there were not enough, or too many, values received (i.e. positive/negative integer value).
+    //If the value is equal to 0 then we can say that this was a valid assignment.
     var token = peek();
     if(token.type === "ASSIGN_EQUALS"){
         expect("ASSIGN_EQUALS");
         token = peek();
-        var applicable = ["FLOAT","NUMBER","ID", "TRUE", "FALSE"];  
+        var applicable = ["FLOAT","NUMBER","ID", "TRUE", "FALSE", "LPAREN", "LBRACKET", "LBRACE", "APOSTROPHE", "QUOTE"];  
         if(applicable.includes(token.type)){
+            //TO DO
+            //
             parse_expr();
-        }
-        else
-        {
+        }else{
             syntax_error("INVALID_ASSIGNMENT");
         }
-    }
-    else if(token.type === "COMMA"){
+    }else if(token.type === "COMMA"){
         expect("COMMA");
         parse_multi_val_assign_stmt();
         token = peek();
-        if(token.type === "COMMA")
-        {
+        //TO DO cont.
+        //Processing...
+        if(token.type === "COMMA"){
             expect("COMMA");
             token = peek();
-            var applicable = ["FLOAT","NUMBER","ID", "TRUE", "FALSE"];
-            if(applicable.includes(token.type))
-            {
+            var applicable = ["FLOAT","NUMBER","ID", "TRUE", "FALSE", "LPAREN", "LBRACKET", "LBRACE", "APOSTROPHE", "QUOTE"];
+            if(applicable.includes(token.type)){
                 parse_expr();
-            }
-            else
-            {
+            }else{
                 syntax_error("INVALID_ASSIGNMENT");
             }
-        }
-        else
-        {
+        }else{
             syntax_error("INVALID_ASSIGNMENT");
         }
     }
@@ -654,13 +655,14 @@ function parse_assign_op(){
             default: syntax_error("INVALID_ASSIGN_OPERATOR");
                 break;
         }
-    }else
+    }else{
             syntax_error("INVALID_ASSIGN_OPERATOR");
+    }
 }
 
 function parse_primary(){
     var token = peek();
-    var primaries = ["ID", "NUMBER", "FLOAT", "TRUE", "FALSE"];
+    var primaries = ["ID", "NUMBER", "FLOAT", "TRUE", "FALSE", "QUOTE", "APOSTROPHE"];
     if(primaries.includes(token.type)){
         switch(token.type){
             case "ID": expect("ID");
@@ -673,6 +675,9 @@ function parse_primary(){
                 break;
             case "FALSE": expect("FALSE");
                 break;
+            case "APOSTROPHE":
+            case "QUOTE": parse_string();
+                break;
             default: syntax_error("INVALID_PRIMARY");
                 break;
         }
@@ -681,57 +686,248 @@ function parse_primary(){
     }
 }
 
+//TO DO
 function parse_string(){
-    
+    var token = peek();
+    //document.write(token.type + "<br><br>");
+    if(token.type === "QUOTE"){
+        expect("QUOTE");
+        token = peek();
+        while(token.type !== "QUOTE"){
+            //document.write(token.type + "<br><br>");
+            expect(token.type);
+            token = peek();
+        }
+        expect("QUOTE");
+    }else if(token.type === "APOSTROPHE"){
+        expect("APOSTROPHE");
+        token = peek();
+        while(token.type !== "APOSTROPHE"){
+            //document.write(token.type + "<br><br>");
+            expect(token.type);
+            token = peek();
+        }
+        expect("APOSTROPHE");
+    }
 }
 
-function parse_string_list(){
-    
-}
+/*function parse_valid_printables(){
+    var token = peek();
+    while(token.type !== "QUOTE"){
+        //document.write(token.type + "<br><br>");
+        expect(token.type);
+        token = peek();
+    }
+}*/
 
+//TO DO
+//Create for list declaration 
 function parse_list(){
-    
+    var token = peek();
+    if(token.type === "LBRACE"){//Start of a list
+        expect("LBRACE");
+        token = peek();
+        if(token.type === "RBRACE"){//base case, variable = []
+            expect("RBRACE");
+        }else if(token.type === "COMMA"){// Invalid syntax, list = [,...] is not allowed
+            syntax_error("");//INSERT SYNTAX ERROR
+        }else{//variable = [...]
+            parse_list_content();
+            expect("RBRACE");
+        }
+    }
 }
 
+function parse_list_content(){
+    var token = peek();
+    if(token.type === "LBRACE"){
+        parse_list();
+        token = peek();
+        if(token.type === "COMMA"){
+            expect("COMMA");
+            token = peek();
+            if(token.type === "RBRACE"){
+                //do nothing, returns to initial call
+            }else if(token.type === "COMMA"){//Invalid syntax/excessive commas. list = [1,2,[],,]
+                syntax_error("");//INSERT SYNTAX ERROR
+            }else{
+                parse_list_content();
+            }
+        }
+    }else{
+        parse_expr();
+        token = peek();
+        if(token.type === "COMMA"){
+            expect("COMMA");
+            token = peek();
+            if(token.type === "RBRACE"){
+                //do nothing, returns to initial call
+            }else if(token.type === "COMMA"){//Invalid syntax/excessive commas. list = [1,2,3,,]
+                syntax_error("");//INSERT SYNTAX ERROR
+            }else{
+                parse_list_content();
+            }
+        }
+    }
+}
+
+//Does not account for the creation of a tuple when not using parentheses in the assignment statement
+//i.e. name = "Bob", "John", "Brown"; is valid
 function parse_tuple(){
+    var token = peek();
+    if(token.type === "LPAREN"){//Start of a tuple
+        expect("LPAREN");
+        token = peek();
+        if(token.type === "RPAREN"){//base case, variable = ()
+            expect("RPAREN");
+        }else if(token.type === "COMMA"){// Invalid syntax, list = (,...) is not allowed
+            syntax_error("");//INSERT SYNTAX ERROR
+        }else{//variable = (...)
+            parse_tuple_content();
+            expect("RPAREN");
+        }
+    }
+}
+
+function parse_tuple_content(){
+    var token = peek();
+    if(token.type === "LPAREN"){
+        parse_tuple();
+        token = peek();
+        if(token.type === "COMMA"){
+            expect("COMMA");
+            token = peek();
+            if(token.type === "RPAREN"){
+                //do nothing, returns to initial call
+            }else if(token.type === "COMMA"){//Invalid syntax/excessive commas. list = (1,2,[],,)
+                syntax_error("");//INSERT SYNTAX ERROR
+            }else{
+                parse_tuple_content();
+            }
+        }
+    }else{
+        parse_expr();
+        token = peek();
+        if(token.type === "COMMA"){
+            expect("COMMA");
+            token = peek();
+            if(token.type === "RPAREN"){
+                //do nothing, returns to initial call
+            }else if(token.type === "COMMA"){//Invalid syntax/excessive commas. list = (1,2,3,,)
+                syntax_error("");//INSERT SYNTAX ERROR
+            }else{
+                parse_tuple_content();
+            }
+        }
+    }
+}
+
+function parse_dictionary(){
+    expect("LBRACKET");
+    var token = peek();
+    if(token.type === "RBRACKET"){//Base Case {}, empty dictionary
+        expect("RBRACKET");
+    }else{
+        parse_dictionary_content();
+        expect("RBRACKET");
+    }
+}
+
+//TO DO
+//Consider String implementation
+function parse_dictionary_content(){
+    var token = peek();
+    var valid_types = ["NUMBER", "FLOAT", "ID", "LPAREN", "TRUE", "FALSE", "APOSTROPHE", "QUOTE"];
+    if(valid_types.includes(token.type)){//TO DO: This will have to account for potentially invalid variables/tuples when runtime is incorporated.
+        parse_expr();
+        token = peek();
+        if(token.type === "COLON"){
+            expect("COLON");
+            parse_expr();
+            if(token.type === "COMMA"){
+                expect("COMMA");
+                parse_dictionary_content();
+            }//else return to expect RBRACKET
+        }else{
+            syntax_error("");//INSERT SYNTAX ERROR
+        }
+    }else{
+        syntax_error("");//INSERT SYNTAX ERROR
+    }
+}
+
+//TO DO
+function parse_set(){
     
 }
 
+//TO DO
+//Address how to incorporate function calls on Strings.
+//Consider future implementations of calling functions on other objects, consider slight redesign.
 function parse_expr(){
     var token = peek();
-    if(token.type === "ID")
-    {
+    if(token.type === "ID"){
         expect("ID");
         var token2 = peek();
         if(token2.type === "PERIOD"){//Used in case of a function, in this case we only have the format function
             token2 = peek_2_ahead();
             if(token2.type === "FORMAT"){ //In case of print(a.format())
                 program = ungetToken(program, token);
-                parse_format_function();
-            }
-            else
-            {
+                parse_var_format_function();
+            }else{
                 //Currently no other functions supported
                 //So throw error
                 syntax_error("NON_FORMAT_ERROR");
+            }//TO DO: double check the below else if statement.
+        }else if(token2.type === "LBRACE"){//list2 = list[0]
+            expect("LBRACE");
+            parse_expr();//Validity should be handled by runtime implementation.
+            token2 = peek();
+            if(token2.type === "COLON"){//list3 = list[0:2]
+                expect("COLON");
+                parse_expr();//Validity should be handled by runtime implementation.
             }
+            expect("RBRACE");
         }
         //otherwise just parse the ID primary and continue parsing potential expression
-    }
-    else
-    {
+    }else if(token.type === "APOSTROPHE" || token.type === "QUOTE"){
+        //WORKING ON IT
+        var string_content = program;
+        parse_string();
+        string_content = string_content.substring(0,string_content.indexOf(program));
+        document.write(string_content + "<br>");
+        
+        var token2 = peek();
+        if(token2.type === "PERIOD"){//Used in case of a function, in this case we only have the format function
+            token2 = peek_2_ahead();
+            if(token2.type === "FORMAT"){ //In case of print(a.format())
+                program = string_content + program;
+                parse_string_format_function();
+            }else{
+                //Currently no other functions supported
+                //So throw error
+                syntax_error("NON_FORMAT_ERROR");
+            }//TO DO: double check the below else if statement.
+        }
+    }else if(token.type === "LBRACE"){
+        parse_list();
+    }else if(token.type === "LPAREN"){
+        parse_tuple();
+    }else if(token.type === "LBRACKET"){
+        //TO DO
+        //Check how to distinguish between dictionary and set implementations after parse_set has been incorporated.
+        parse_dictionary();
+    }else{
         parse_primary();
     }
+    
     token = peek();
     var operations = ["PLUS", "MINUS", "MULT", "DIV", "MOD", "EXPO", "IN", "NOTIN", "IS", "ISNOT"];
     var compare_ops = ["COMPARE_EQUALS", "NOT_EQUAL", "LESS_THAN", "LESS_THAN_EQUAL", "GREATER_THAN", "GREATER_THAN_EQUAL"];
-    if(operations.includes(token.type))
-    {
+    if(operations.includes(token.type)){
         parse_op();
         parse_expr();
-    }
-    else if(compare_ops.includes(token.type))
-    {
+    }else if(compare_ops.includes(token.type)){
         parse_comparison_operator();
         parse_expr();
     }//else do nothing
@@ -777,14 +973,16 @@ function parse_print_stmt(){
         case "FLOAT":
         case "TRUE":
         case "FALSE":
+        case "LPAREN":
+        case "LBRACKET": 
+        case "LBRACE": 
+        case "APOSTROPHE": 
+        case "QUOTE":
             parse_print_multi_val();
             token = peek();
-            if(token.type === "RPAREN")
-            {
+            if(token.type === "RPAREN"){//Can reduce this to just use expect("RPAREN"), instead of this if statement
                 expect("RPAREN");
-            }
-            else
-            {
+            }else{
                 syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
             }
             break;
@@ -796,8 +994,8 @@ function parse_print_stmt(){
 //Currently this will account for every way to print with single input, or multiple inputs for the print function
 function parse_print_multi_val(){
     var token = peek();
-    var primaries = ["ID", "NUMBER", "FLOAT", "TRUE", "FALSE"];
-    if(primaries.includes(token.type)){
+    var valid_types = ["ID", "NUMBER", "FLOAT", "TRUE", "FALSE", "LPAREN", "LBRACKET", "LBRACE", "APOSTROPHE", "QUOTE"];
+    if(valid_types.includes(token.type)){
         parse_expr();
         var token = peek();
         if(token.type === "COMMA"){
@@ -809,117 +1007,596 @@ function parse_print_multi_val(){
 
 //TO DO
 //might be renamed to reflect it being specifically variable parsing instead of combining future String implementation
-function parse_format_function(){
+function parse_var_format_function(){
     var token = peek();
     var token2;
+    //TO DO
+    //Add an if statement for the condition of a String being used
     if(token.type === "ID"){
-       expect("ID");
-       expect("PERIOD");
-       //need to add format to keywords (alternatively a different array) in order to get the token.
-       //That, or add a token equal to peek() and use an if statement to check that the token.id equals format
-       //then do expect() using the token that was set.
-       expect("FORMAT");
-       expect("LPAREN");
-       token = peek();
-       var nameFmtUsed = false;
-       var parameterCount = 0;//will be useful when grabbing the value stored inside a variable
-       while(token.type !== "RPAREN"){
-           token = peek();
-           token2 = peek_2_ahead();
-           if(!nameFmtUsed){//named parameters have not occured yet, meaning primaries and expressions can be used as well
-                if(token.type === "ID" && token2.type === "ASSIGN_EQUALS"){//asd.format(a=5)
-                   nameFmtUsed = true;
-                   expect("ID");
-                   expect("ASSIGN_EQUALS");
-                   parse_expr();
-                   parameterCount++;
-                   token = peek();//potentially set token to RPAREN and exit while loop
-                   if(token.type === "COMMA"){//asd.format(a=5, ...)
-                       expect("COMMA");
-                       token = peek();//potentially set token to RPAREN and exit while loop
-                       if(token.type === "RPAREN"){//asd.format(a=5,)
-                           expect("RPAREN");
-                       }
-                   }
-                   else
-                   {
-                       if(token.type === "RPAREN")
-                       {//asd.format(a=5)
-                           expect("RPAREN");
-                       }
-                       else
-                       {
-                           syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
-                       }
-                   }
-               }
-               else
-               {//asd.format(primary/expression, ...)
-                   parse_expr();
-                   parameterCount++;
-                   token = peek();
-                   if(token.type === "COMMA"){//asd.format(primary/expression, ...)
-                       expect("COMMA");
-                       token = peek();//potentially set token to RPAREN and exit while loop
-                       if(token.type === "RPAREN"){//asd.format(primary/expression, ... , primary/expression,)
-                           expect("RPAREN");
-                       }
-                   }
-                   else
-                   {
-                       if(token.type === "RPAREN")
-                       { //asd.format(primary/expression, ... , primary/expression)
-                           expect("RPAREN");
-                       }
-                       else
-                       {
-                           syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
-                       }
-                   }
-               }
-           }
-           else
-           {//Only named paramters can appear after they've been used once
-               if(token.type === "ID" && token2.type === "ASSIGN_EQUALS")
-               { //asd.format(..., a=5, b=6, variable=...)
-                   expect("ID");
-                   expect("ASSIGN_EQUALS");
-                   parse_expr();
-                   parameterCount++;
-                   token = peek();//potentially set token to RPAREN and exit while loop
-                   if(token.type === "COMMA"){//asd.format(a=5, b=6, ...)
-                       expect("COMMA");
-                       token = peek();//potentially set token to RPAREN and exit while loop
-                       if(token.type === "RPAREN"){//asd.format(a=5, b=6, ... , z=10,)
-                           expect("RPAREN");
-                       }
-                   }else{
-                       if(token.type === "RPAREN"){//asd.format(a=5, b=6, ... , z=10)
-                           expect("RPAREN");
-                       }else{
-                           syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
-                       }
-                   }
-               }
-               else
-               {//There was a violation as only the named format can be used now.
-                   syntax_error("ERROR_FORMAT_VIOLATION");
-                   break;
-               }
-           }
-       }
-   }
+        expect("ID");
+        expect("PERIOD");
+        //need to add format to keywords (alternatively a different array) in order to get the token.
+        //That, or add a token equal to peek() and use an if statement to check that the token.id equals format
+        //then do expect() using the token that was set.
+        expect("FORMAT");
+        expect("LPAREN");
+        token = peek();
+        var nameFmtUsed = false;
+        var parameterCount = 0;//will be useful when grabbing the value stored inside a variable
+        while(token.type !== "RPAREN"){
+            token = peek();
+            token2 = peek_2_ahead();
+            if(!nameFmtUsed){//named parameters have not occured yet, meaning primaries and expressions can be used as well
+                 if(token.type === "ID" && token2.type === "ASSIGN_EQUALS"){//asd.format(a=5)
+                    nameFmtUsed = true;
+                    expect("ID");
+                    expect("ASSIGN_EQUALS");
+                    parse_expr();
+                    parameterCount++;
+                    token = peek();//potentially set token to RPAREN and exit while loop
+                    if(token.type === "COMMA"){//asd.format(a=5, ...)
+                        expect("COMMA");
+                        token = peek();//potentially set token to RPAREN and exit while loop
+                        if(token.type === "RPAREN"){//asd.format(a=5,)
+                            expect("RPAREN");
+                        }
+                    }else{
+                        if(token.type === "RPAREN"){//asd.format(a=5)
+                            expect("RPAREN");
+                        }else{
+                            syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
+                        }
+                    }
+                }else{//asd.format(primary/expression, ...)
+                    parse_expr();
+                    parameterCount++;
+                    token = peek();
+                    if(token.type === "COMMA"){//asd.format(primary/expression, ...)
+                        expect("COMMA");
+                        token = peek();//potentially set token to RPAREN and exit while loop
+                        if(token.type === "RPAREN"){//asd.format(primary/expression, ... , primary/expression,)
+                            expect("RPAREN");
+                        }
+                    }else{
+                        if(token.type === "RPAREN"){ //asd.format(primary/expression, ... , primary/expression)
+                            expect("RPAREN");
+                        }else{
+                            syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
+                        }
+                    }
+                }
+            }else{//Only named paramters can appear after they've been used once
+                if(token.type === "ID" && token2.type === "ASSIGN_EQUALS"){ //asd.format(..., a=5, b=6, variable=...)
+                    expect("ID");
+                    expect("ASSIGN_EQUALS");
+                    parse_expr();
+                    parameterCount++;
+                    token = peek();//potentially set token to RPAREN and exit while loop
+                    if(token.type === "COMMA"){//asd.format(a=5, b=6, ...)
+                        expect("COMMA");
+                        token = peek();//potentially set token to RPAREN and exit while loop
+                        if(token.type === "RPAREN"){//asd.format(a=5, b=6, ... , z=10,)
+                            expect("RPAREN");
+                        }
+                    }else{
+                        if(token.type === "RPAREN"){//asd.format(a=5, b=6, ... , z=10)
+                            expect("RPAREN");
+                        }else{
+                            syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
+                        }
+                    }
+                }else{//There was a violation as only the named format can be used now.
+                    syntax_error("ERROR_FORMAT_VIOLATION");
+                    break;
+                }
+            }
+        }
+    }
 }
+
+function parse_string_format_function(){
+    var token = peek();
+    var token2;
+    var type = token.type;
+    var string_content;
+    var parameterCount = 0;//will be useful when grabbing the value stored inside a {} paring
+    var nameFmtUsed = false;
+    var namedParameters = [];
+    if(token.type === "APOSTROPHE" || token.type === "QUOTE" || token.type === "ID"){
+        if(token.type === "ID"){
+            expect("ID");
+        }else{
+            //Getting the content of the string that the function is being called on
+            string_content = program;
+            parse_string();
+            string_content = string_content.substring(1, string_content.indexOf(program)-1);
+        }        
+        expect("PERIOD");
+        //need to add format to keywords (alternatively a different array) in order to get the token.
+        //That, or add a token equal to peek() and use an if statement to check that the token.id equals format
+        //then do expect() using the token that was set.
+        expect("FORMAT");
+        expect("LPAREN");
+        token = peek();
+        while(token.type !== "RPAREN"){
+            token = peek();
+            token2 = peek_2_ahead();
+            if(!nameFmtUsed){//named parameters have not occured yet, meaning primaries and expressions can be used as well
+                 if(token.type === "ID" && token2.type === "ASSIGN_EQUALS"){//asd.format(a=5)
+                    nameFmtUsed = true;
+                    expect("ID");
+                    expect("ASSIGN_EQUALS");
+                    parse_expr();
+                    namedParameters.push(token.id);
+                    
+                    token = peek();//potentially set token to RPAREN and exit while loop
+                    if(token.type === "COMMA"){//asd.format(a=5, ...)
+                        expect("COMMA");
+                        token = peek();//potentially set token to RPAREN and exit while loop
+                        if(token.type === "RPAREN"){//asd.format(a=5,)
+                            expect("RPAREN");
+                        }
+                    }else{
+                        if(token.type === "RPAREN"){//asd.format(a=5)
+                            expect("RPAREN");
+                        }else{
+                            syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
+                        }
+                    }
+                }else{//asd.format(primary/expression, ...)
+                    parse_expr();
+                    parameterCount++;
+                    token = peek();
+                    if(token.type === "COMMA"){//asd.format(primary/expression, ...)
+                        expect("COMMA");
+                        token = peek();//potentially set token to RPAREN and exit while loop
+                        if(token.type === "RPAREN"){//asd.format(primary/expression, ... , primary/expression,)
+                            expect("RPAREN");
+                        }
+                    }else{
+                        if(token.type === "RPAREN"){ //asd.format(primary/expression, ... , primary/expression)
+                            expect("RPAREN");
+                        }else{
+                            syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
+                        }
+                    }
+                }
+            }else{//Only named paramters can appear after they've been used once
+                if(token.type === "ID" && token2.type === "ASSIGN_EQUALS"){ //asd.format(..., a=5, b=6, variable=...)
+                    expect("ID");
+                    expect("ASSIGN_EQUALS");
+                    parse_expr();
+                    namedParameters.push(token.id);
+                    token = peek();//potentially set token to RPAREN and exit while loop
+                    if(token.type === "COMMA"){//asd.format(a=5, b=6, ...)
+                        expect("COMMA");
+                        token = peek();//potentially set token to RPAREN and exit while loop
+                        if(token.type === "RPAREN"){//asd.format(a=5, b=6, ... , z=10,)
+                            expect("RPAREN");
+                        }
+                    }else{
+                        if(token.type === "RPAREN"){//asd.format(a=5, b=6, ... , z=10)
+                            expect("RPAREN");
+                        }else{
+                            syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
+                        }
+                    }
+                }else{//There was a violation as only the named format can be used now.
+                    syntax_error("ERROR_FORMAT_VIOLATION");
+                    break;
+                }
+            }
+        }
+    }
+    //syntax is correct, check other constraints.
+    if(type === "APOSTROPHE" || type === "QUOTE"){
+        //TO DO
+        //re-edit the _format functions
+        //make a bracket check function that will occur after affirming that ordered and unordered aren't used together
+        //need to remake my solution for the brackets as I don't think it actually works right now
+    }
+}
+
+
+
+/*
+Something like:
+
+lBrktExists = str.indexOf("{") !== -1;
+rBrktExists = str.indexOf("}") !== -1;
+
+//TO DO
+//could just make the is_Format() calls just the match function of the respective regular expression
+if(lBrktExists && rBrktExists){ //return array of matches
+	orderedPairs = used_pairings = substr.match(/{}/g);
+	unorderedPairs = substr.match(/{[0-9]+}/g);
+	namedPairs = substr.match(/{[A-Za-z_]+[A-Za-z0-9_]*}/g);
+	
+	if(orderedPairs.length > 0 && unorderedPairs.length > 0){
+		//INSERT SYNTAX ERROR
+		//Cannot use automatic and manual formats together
+	}else{ 
+		if(orderedPairs.length > 0){
+			ordered_format();
+		}else if(unorderedPairs.length > 0){
+			unordered_format();
+			}else{
+				if(namedPairs.length > 0){
+					named_format();
+				}else{//Brackets appear, but don't fit the format
+					//Potential syntax error
+					validBrackets();
+				}
+			}
+		}
+	}else{
+		//Maybe incorporate into validBrackets()
+		
+		if(lBrktExists){ //"hello there {name  ".format(name = "bob");
+			//Missing Right Bracket Pairing
+			//INSERT SYNTAX ERROR
+		}else if(rBrktExists){ //"hello there name}  ".format(name = "bob");
+			//Missing Left Bracket Pairing
+			//INSERT SYNTAX ERROR
+		}else{ //"hello there ".format(name = "bob");
+			//There are no Brackets at all, meaning the parameters inside the format function can't be used.
+		}
+	}
+}
+
+Let's say that we've gotten the valid bracket pairs listed.
+We don't delete them from the original string content, but instead combine the arrays to compare the occurence.
+	i.e. [{}, {name}, {job}, {age}] or [{0}, {1}, {2}, {name}, {job}, {age}]
+	
+	If the number of {'s is even, then whatever follows doesn't matter yet.
+		The number of }'s must be even until the occurence of the next {.
+		Else the number of }'s is odd and doesn't having a matching pair.
+	If the number of {'s is odd, then whatever comes next must be one of the things in the list. Delete that element from the array.
+		The number of }'s must be odd until the occurenxe of the next {
+		Else the number of }'s must be even, meaning there is no matching { pair.
+	If the number of }'s is even, then whatever follows doesn't matter until the next {.
+	
+	If the number of }'s is odd, then there's a syntax error as there was no closing { pair before it.
+	
+	position = str.indexOf("{");
+	if(position === -1){
+		position 
+	}
+	while(position){
+		
+	}
+	
+--------------------------------------------------------------------------------
+
+var lBrackets = str.match(/{+/g);
+var rBrackets = str.match(/}+/g);
+var l_place = 0;
+var r_place = 0;
+var l_finished = false;
+var r_finished = false;
+
+var l_or_r = -1;
+var even_or_odd = -1;
+
+if(lBrackets.length > 0 && rBrackets.length > 0){
+	
+	if(str.indexOf(lBrackets[l_place]) < str.indexOf(rBrackets[r_place])){
+		l_or_r = 0;
+		even_or_odd = lBrackets[l_place].length % 2;
+		l_place++;
+		if(lBrackets.length === l_place){
+			l_finished = true;
+		}
+	}else{
+		l_or_r = 1;
+		even_or_odd = rBrackets[r_place].length % 2;
+		if(even_or_odd){
+			
+		}
+		if(rBrackets.length === r_place){
+			syntax_error("");//INSERT SYNTAX ERROR
+		}
+	}
+	
+	
+	while(l_finished && r_finished){
+		if(l_finished){
+			
+		}else if(r_finished){
+			
+		}else{
+			if(str.indexOf(lBrackets[l_place]) < str.indexOf(rBrackets[r_place])){
+				even_or_odd = lBrackets[l_place].length % 2 === 0;
+				if(){ //The number of Left Brackets is even
+					l_place++;
+					
+				}else{//The number of Right Brackets is odd
+					
+				}
+			}
+		}
+		
+	}
+}else{
+	if(lBrackets.length === 0){
+		//INSERT SYNTAX ERROR
+		//Missing LBRACKET pair
+	}else if(rBrackets.length === 0){
+		//INSERT SYNTAX ERROR
+		//Missing RBRACKET pair
+	}else{
+		//Is a valid string
+	}
+}
+
+-------------------------------------------------------------------------------------------------------
+Let's say that we've gotten the valid bracket pairs listed.
+We don't delete them from the original string content, but instead combine the arrays to compare the occurence.
+	i.e. [{}, {name}, {job}, {age}] or [{0}, {1}, {2}, {name}, {job}, {age}]
+	
+	If the number of {'s is even, then whatever follows doesn't matter yet.
+		The number of }'s must be even until the occurence of the next {.
+		Else the number of }'s is odd and doesn't having a matching pair.
+	If the number of {'s is odd, then whatever comes next must be one of the things in the list. Delete that element from the array.
+		The number of }'s must be odd until the occurence of the next {
+		Else the number of }'s must be even, meaning there is no matching { pair.
+	If the number of }'s is even, then whatever follows doesn't matter until the next {.
+	
+	If the number of }'s is odd, then there's a syntax error as there was no closing { pair before it.
+
+var bracket_pairs = b_pairs; // gotten from parameter
+var brackets = str.match(/{+|}+/g)
+
+if(brackets.length !== 0){
+	
+	var i = 0;
+	var curr_left_or_right = -1;
+	var prev_left_or_right = -1;
+	var curr_even_or_odd = -1;
+	var prev_even_or_odd = -1;
+	
+	while(!finished){
+		if(i === 0){
+			curr_left_or_right = brackets[i][0];
+			curr_even_or_odd = brackets[i].length % 2;
+			str = str.substring(str.indexOf(brackets[i]) + brackets[i].length);
+			i++;
+		}else{
+			prev_left_or_right = curr_left_or_right;
+			prev_even_or_odd = curr_even_or_odd;
+			
+			curr_left_or_right = brackets[i][0];
+			curr_even_or_odd = brackets[i].length % 2;
+			
+			if(prev_left_or_right === 0 && prev_even_or_odd === 0){ // ...{{...
+				
+			}else if(prev_left_or_right === 0 && prev_even_or_odd === 1){ // ...{{{...
+				if(curr_left_or_right === 1 && curr_even_or_odd === 1){ // {{{...}}}
+					var parameterValue = "{" + str.substring(0, str.indexOf(brackets[i])) + "}"
+					if(!bracket_pairs.includes(parameterValue)){
+						//INSERT SYNTAX ERROR
+					}else{
+						str = str.substring(str.indexOf(brackets[i]) + brackets[i].length);
+						i++;
+					}
+				}else if(curr_left_or_right === 1 && curr_even_or_odd === 0){
+					
+				}
+			}else if(prev_left_or_right === 1 && prev_even_or_odd === 0){ // ...}}...
+				
+			}else{ // ...}}}...
+				
+			}
+			
+		}
+		
+	}
+	
+	for(var i = 0; i < brackets.length; i++){
+		left_or_right = brackets[i][0];
+		even_or_odd = brackets[i].length % 2
+	}
+}
+}else{
+	//It's a string without brackets
+}
+
+---------------------------------------------------------------------------------------------------
+Counting version...
+How to handle doubles
+
+
+
+var countValue = 0;
+var pairValues = [];
+var value = "";
+
+for(var i = 0; i < str.length; i++){
+	if(countValue === 0){
+		if(str[i] === "{"){
+			countValue++;
+		}else if(str[i] === "}"){
+			countValue--;
+		}else{
+			//else just read charcters in the string that are not bounded by brackets
+		}
+	}else if(countValue === 1){
+		if(str[i] === "{"){
+			if(value === ""){
+				countValue--;
+			}else{
+				//Unexpected '{' in field name
+				//INSERT SYNTAX ERROR
+			}
+		}else if(str[i] === "}"){
+			pairValues.push(value);
+			value = "";
+			countValue--;
+		}else{
+			value += str[i];
+		}
+	}else if(countValue === -1){
+		if(str[i] === "}"){
+			countValue++;
+		}else{
+			//Single '}' encountered in format string
+			//INSERT SYNTAX ERROR
+		}
+	}
+}
+
+//casts functions
+int bool
+str
+
+//min and max function
+
+//len
+
+//NO range
+
+
+
+
+
+
+
+
+
+*/
+
+function valid_brackets(content){
+	
+}
+
+
+
+function ordered_format(content, paraCount){
+	var substr = content;
+	var used_pairings = substr.match(/{}/g);
+	var orderCount = used_pairings.length;
+	var validIndices = true;
+	var validBrackets = true;
+	
+	// true: "string values {}{}{}{namedParameter}".format(1,2,3,namedParameter = "i")"
+	// false: "string values {}{}{}{}".format(1,2,3,namedParameter = "i")"
+	if(orderCount > paraCount){
+		validIndices = false;
+	}else{
+		for(var i = 0; i < orderCount; i++){
+			substr = substr.substring(0, substr.indexOf(used_pairings[i])) + substr.substring(substr.indexOf(used_pairings[i]) + used_pairings[i].length);
+		}
+		
+		var rBrackets = substr.match(/{+/g);
+		var lBrackets = substr.match(/}+/g);
+		for(var i = 0; i < rBrackets.length; i++){
+			if(rBrackets[i].length % 2 === 1){
+				validBrackets = false;
+			}
+		}
+		for(var i = 0; i < lBrackets.length; i++){
+			if(lBrackets[i].length % 2 === 1){
+				validBrackets = false;
+			}
+		}
+	}
+	
+	if(!validBrackets){
+		syntax_error("");//INSERT SYNTAX ERROR
+	}else if(!validIndices){
+		syntax_error("");//INSERT SYNTAX ERROR
+	}
+	
+	return orderCount;
+}
+
+function unordered_format(content, paraCount){
+	var substr = content;
+	var used_pairings = substr.match(/{[0-9]+}/g);
+	var unorderCount = used_pairings.length;
+	var validIndices = true;
+	var validBrackets = true;
+	
+	for(var i = 0; i < used_pairings.length; i++){
+		//TO DO
+		//need to compare the integer values
+		// true: "string values {0}{1}{2}{namedParameter}".format(1,2,3,namedParameter = "i")"
+		// false: "string values {0}{1}{1}{3}".format(1,2,3,namedParameter = "i")
+		if(substr.substring(1, used_pairings[i]-1) >= paraCount){
+			validIndices = false;
+		}else{
+			substr = substr.substring(0, substr.indexOf(used_pairings[i])) + substr.substring(substr.indexOf(used_pairings[i]) + used_pairings[i].length);
+		}
+	}
+	
+	if(validIndices){
+		var rBrackets = substr.match(/{+/g);
+		var lBrackets = substr.match(/}+/g);
+		for(var i = 0; i < rBrackets.length; i++){
+			if(rBrackets[i].length % 2 === 1){
+				validBrackets = false;
+			}
+		}
+		for(var i = 0; i < lBrackets.length; i++){
+			if(lBrackets[i].length % 2 === 1){
+				validBrackets = false;
+			}
+		}
+	}
+	
+	if(!validBrackets){
+		syntax_error("");//INSERT SYNTAX ERROR
+	}else if(!validIndices){
+		syntax_error("");//INSERT SYNTAX ERROR
+	}
+	
+	return unorderCount;
+}
+
+function named_format(content, namedPara){
+	var substr = content;
+	var used_pairings = substr.match(/{[A-Za-z_]+[A-Za-z0-9_]*}/g);
+	var namedCount = used_pairings.length;
+	var validParaNames = true;
+	var validBrackets = true;
+	
+	for(var i = 0; i < used_pairings.length; i++){
+		if(!namedPara.includes(substr.substring(1, used_pairings[i]-1))){
+			validParaNames = false;
+		}else{
+			substr = substr.substring(0, substr.indexOf(used_pairings[i])) + substr.substring(substr.indexOf(used_pairings[i]) + used_pairings[i].length);
+		}
+	}
+	
+	if(validParaNames){
+	var rBrackets = substr.match(/{+/g);
+	var lBrackets = substr.match(/}+/g);
+	for(var i = 0; i < rBrackets.length; i++){
+		if(rBrackets[i].length % 2 === 1){
+			validBrackets = false;
+		}
+	}
+	for(var i = 0; i < lBrackets.length; i++){
+		if(lBrackets[i].length % 2 === 1){
+			validBrackets = false;
+		}
+	}
+	
+	if(!validBrackets){
+		syntax_error("");//INSERT SYNTAX ERROR
+	}else if(!validParaNames){
+		syntax_error("");//INSERT SYNTAX ERROR
+	}
+	
+	return namedCount;
+}
+
 
 function parse_print_type(){
     
 }
 
 function parse_string_print(){
-    
-}
-
-function parse_valid_printables(){
     
 }
 
@@ -960,17 +1637,22 @@ function parse_input_stmt(){
     expect("INPUT");
     expect("LPAREN");
     var token = peek();
-    var primaries = ["FLOAT","NUMBER","ID", "TRUE", "FALSE"];
+    var primaries = ["FLOAT", "NUMBER", "ID", "TRUE", "FALSE", "LPAREN", "LBRACKET", "LBRACE", "APOSTROPHE", "QUOTE"];
     if(token.type === "RPAREN"){
         expect("RPAREN");
-    }
-    else if(primaries.includes(token.type))
-    {
+    }else if(primaries.includes(token.type)){
         parse_expr();
         expect("RPAREN");
-    }
-    else
-    {
+    }else{
         syntax_error("INVALID_INPUT");
+    }
+}
+
+function parse_comment(){
+    expect("HASH_TAG");
+    var token = peek();
+    while(token.type !== "END_OF_LINE"){
+        expect(token.type);
+        token = peek();
     }
 }

@@ -15,7 +15,7 @@ var keySymbol = ["=", "+", "-", "*", "/", "%", "<", ">", ":", ";",
 var reservedWord = ["True", "False", "None", "and", "as", "assert", "break", "class",
     "continue", "def", "del", "elif", "else", "except", "finally", "for", "from",
 "global", "if", "import", "in", "is", "lambda", "my_range", "nonlocal", "not", "or", "pass", "print",
-"raise", "range", "return", "try", "while", "with", "xrange", "yield"];
+"raise", "range", "return", "try", "while", "with", "xrange", "yield", "format", "input"];
 
 var code_line = 1;
 
@@ -336,16 +336,16 @@ function getToken(input){
                 }
                 break;
             case "!":
+                lexeme.length++;
+                if(input.charAt(1) === "="){
+                    lexeme.id = "!=";
+                    lexeme.type = "NOT_EQUAL"; //May want to get rid of <> case altogether as its deprecated
                     lexeme.length++;
-                    if(input.charAt(1) === "="){
-                        lexeme.id = "!=";
-                        lexeme.type = "NOT_EQUAL"; //May want to get rid of <> case altogether as its deprecated
-                        lexeme.length++;
-                    }else{
-                        lexeme.id = "error";
-                        lexeme.type = "unchecked symbol";
-                        lexeme.length++;
-                    }
+                }else{
+                    lexeme.id = "error";
+                    lexeme.type = "unchecked symbol";
+                    lexeme.length++;
+                }
                 break;
             case ":":
                 lexeme.id = ":";
@@ -403,6 +403,10 @@ function getToken(input){
                     lexeme.length++;
                     lexeme.id = "\\\"";
                     lexeme.type = "ESCAPE_QUOTE";
+                }else if(input.charAt(1) === "\'"){
+                    lexeme.length++;
+                    lexeme.id = "\\\'";
+                    lexeme.type = "ESCAPE_APOSTROPHE";
                 }else{
                     lexeme.id = "\\";
                     lexeme.type = "ESCAPE_SLASH";
@@ -468,7 +472,7 @@ function getToken(input){
 }
 
 function ungetToken(input, token){
-    return token.id + "" + input;
+    return token.id + " " + input;
 }
 
 function incrementCodeLine(){
@@ -477,4 +481,3 @@ function incrementCodeLine(){
 function decrementCodeLine(){
     code_line--;
 }
-
