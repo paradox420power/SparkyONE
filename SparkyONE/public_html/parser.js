@@ -8,63 +8,6 @@ function error_expected_not_matching(expected, received, line_no){
     document.write("Expected Token: " + expected + "<br>Received Token: " + received + "<br>At line " + line_no + "<br>");
 }
 
-function syntax_error(errorType){
-    if (errorType === "UNKNOWN_SYMBOL"){
-        alert("Program contains unknown symbols!");
-        exit();
-    }else if (errorType === "INVALID_STATEMENT"){
-        alert("Invalid statement!");
-        exit();
-    }else if (errorType === "INDENTATION_ERROR"){
-        alert("Indentation error detected!");
-        exit();
-    }else if (errorType === "INVALID_COND_OPERATOR"){
-        alert("Invalid conditional operator!");
-        exit();
-    }else if (errorType === "INVALID_COMP_OPERATOR"){
-        alert("Invalid comparison operator!");
-        exit();
-    }else if (errorType === "INVALID_LINK"){
-        alert("Invalid comparison link!");
-        exit();
-    }else if (errorType === "INVALID_RANGE"){
-        alert("Invalid ranged specified!");
-        exit();
-    }else if (errorType === "INVALID_RHS"){
-        alert("Invalif right-hand side value/variable");
-        exit();
-    }else if (errorType === "INVALID_ASSIGNMENT"){
-        alert("Invalid assignment operation!");
-        exit();
-    }else if (errorType === "INVALID_ASSIGN_OPERATOR"){
-        alert("Invalid assignment operator!");
-        exit();
-    }else if (errorType === "INVALID_PRIMARY"){
-        alert("Invalid primary type!");
-        exit();
-    }else if (errorType === "NON_FORMAT_ERROR"){
-        alert("Only format() allowed!");
-        exit();
-    }else if (errorType === "INVALID_OPERATOR"){
-        alert("Invalid arithmetic operator!");
-        exit();
-    }else if (errorType === "ERROR_MISSING_RIGHT_PARENTHESIS"){
-        alert("Expecting right parenthesis!");
-        exit();
-    }else if (errorType === "ERROR_FORMAT_VIOLATION"){
-        alert("format() violation detected!");
-        exit();
-    }else if (errorType === "INVALID_INPUT"){
-        alert("Invalid input!");
-        exit();
-    }else{
-        //document.write("Unspecified Error<br>");
-        alert("Unspecified Error");
-        exit();
-    }
-    
-}
-
 //used to remove unwanted spaces
 function skipSpaces(){
     var token = getToken(program);
@@ -873,7 +816,7 @@ function parse_expr(){
             token2 = peek_2_ahead();
             if(token2.type === "FORMAT"){ //In case of print(a.format())
                 program = ungetToken(program, token);
-                parse_var_format_function();
+                parse_format_function();
             }else{
                 //Currently no other functions supported
                 //So throw error
@@ -891,7 +834,6 @@ function parse_expr(){
         }
         //otherwise just parse the ID primary and continue parsing potential expression
     }else if(token.type === "APOSTROPHE" || token.type === "QUOTE"){
-        //WORKING ON IT
         var string_content = program;
         parse_string();
         string_content = string_content.substring(0,string_content.indexOf(program));
@@ -900,14 +842,14 @@ function parse_expr(){
         var token2 = peek();
         if(token2.type === "PERIOD"){//Used in case of a function, in this case we only have the format function
             token2 = peek_2_ahead();
-            if(token2.type === "FORMAT"){ //In case of print(a.format())
+            if(token2.type === "FORMAT"){ //In case of print("a".format())
                 program = string_content + program;
-                parse_string_format_function();
+                parse_format_function();
             }else{
                 //Currently no other functions supported
                 //So throw error
                 syntax_error("NON_FORMAT_ERROR");
-            }//TO DO: double check the below else if statement.
+            }
         }
     }else if(token.type === "LBRACE"){
         parse_list();
@@ -980,7 +922,7 @@ function parse_print_stmt(){
         case "QUOTE":
             parse_print_multi_val();
             token = peek();
-            if(token.type === "RPAREN"){//Can reduce this to just use expect("RPAREN"), instead of this if statement
+            if(token.type === "RPAREN"){//TO DO: Can reduce this to just use expect("RPAREN"), instead of this if statement
                 expect("RPAREN");
             }else{
                 syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
@@ -1005,108 +947,21 @@ function parse_print_multi_val(){
     }
 }
 
-//TO DO
-//might be renamed to reflect it being specifically variable parsing instead of combining future String implementation
-function parse_var_format_function(){
+function parse_format_function(){
     var token = peek();
     var token2;
-    //TO DO
-    //Add an if statement for the condition of a String being used
-    if(token.type === "ID"){
-        expect("ID");
-        expect("PERIOD");
-        //need to add format to keywords (alternatively a different array) in order to get the token.
-        //That, or add a token equal to peek() and use an if statement to check that the token.id equals format
-        //then do expect() using the token that was set.
-        expect("FORMAT");
-        expect("LPAREN");
-        token = peek();
-        var nameFmtUsed = false;
-        var parameterCount = 0;//will be useful when grabbing the value stored inside a variable
-        while(token.type !== "RPAREN"){
-            token = peek();
-            token2 = peek_2_ahead();
-            if(!nameFmtUsed){//named parameters have not occured yet, meaning primaries and expressions can be used as well
-                 if(token.type === "ID" && token2.type === "ASSIGN_EQUALS"){//asd.format(a=5)
-                    nameFmtUsed = true;
-                    expect("ID");
-                    expect("ASSIGN_EQUALS");
-                    parse_expr();
-                    parameterCount++;
-                    token = peek();//potentially set token to RPAREN and exit while loop
-                    if(token.type === "COMMA"){//asd.format(a=5, ...)
-                        expect("COMMA");
-                        token = peek();//potentially set token to RPAREN and exit while loop
-                        if(token.type === "RPAREN"){//asd.format(a=5,)
-                            expect("RPAREN");
-                        }
-                    }else{
-                        if(token.type === "RPAREN"){//asd.format(a=5)
-                            expect("RPAREN");
-                        }else{
-                            syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
-                        }
-                    }
-                }else{//asd.format(primary/expression, ...)
-                    parse_expr();
-                    parameterCount++;
-                    token = peek();
-                    if(token.type === "COMMA"){//asd.format(primary/expression, ...)
-                        expect("COMMA");
-                        token = peek();//potentially set token to RPAREN and exit while loop
-                        if(token.type === "RPAREN"){//asd.format(primary/expression, ... , primary/expression,)
-                            expect("RPAREN");
-                        }
-                    }else{
-                        if(token.type === "RPAREN"){ //asd.format(primary/expression, ... , primary/expression)
-                            expect("RPAREN");
-                        }else{
-                            syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
-                        }
-                    }
-                }
-            }else{//Only named paramters can appear after they've been used once
-                if(token.type === "ID" && token2.type === "ASSIGN_EQUALS"){ //asd.format(..., a=5, b=6, variable=...)
-                    expect("ID");
-                    expect("ASSIGN_EQUALS");
-                    parse_expr();
-                    parameterCount++;
-                    token = peek();//potentially set token to RPAREN and exit while loop
-                    if(token.type === "COMMA"){//asd.format(a=5, b=6, ...)
-                        expect("COMMA");
-                        token = peek();//potentially set token to RPAREN and exit while loop
-                        if(token.type === "RPAREN"){//asd.format(a=5, b=6, ... , z=10,)
-                            expect("RPAREN");
-                        }
-                    }else{
-                        if(token.type === "RPAREN"){//asd.format(a=5, b=6, ... , z=10)
-                            expect("RPAREN");
-                        }else{
-                            syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
-                        }
-                    }
-                }else{//There was a violation as only the named format can be used now.
-                    syntax_error("ERROR_FORMAT_VIOLATION");
-                    break;
-                }
-            }
-        }
-    }
-}
-
-function parse_string_format_function(){
-    var token = peek();
-    var token2;
-    var type = token.type;
     var string_content;
+    var type = "";
     var parameterCount = 0;//will be useful when grabbing the value stored inside a {} paring
     var nameFmtUsed = false;
     var namedParameters = [];
+    
     if(token.type === "APOSTROPHE" || token.type === "QUOTE" || token.type === "ID"){
         if(token.type === "ID"){
             expect("ID");
         }else{
             //Getting the content of the string that the function is being called on
+            type = token.type;
             string_content = program;
             parse_string();
             string_content = string_content.substring(1, string_content.indexOf(program)-1);
@@ -1118,519 +973,229 @@ function parse_string_format_function(){
         expect("FORMAT");
         expect("LPAREN");
         token = peek();
-        while(token.type !== "RPAREN"){
-            token = peek();
-            token2 = peek_2_ahead();
-            if(!nameFmtUsed){//named parameters have not occured yet, meaning primaries and expressions can be used as well
-                 if(token.type === "ID" && token2.type === "ASSIGN_EQUALS"){//asd.format(a=5)
-                    nameFmtUsed = true;
-                    expect("ID");
-                    expect("ASSIGN_EQUALS");
-                    parse_expr();
-                    namedParameters.push(token.id);
-                    
-                    token = peek();//potentially set token to RPAREN and exit while loop
-                    if(token.type === "COMMA"){//asd.format(a=5, ...)
-                        expect("COMMA");
+        if(token.type === "RPAREN"){
+            expect("RPAREN");
+        }else{
+            while(token.type !== "RPAREN"){
+                token = peek();
+                token2 = peek_2_ahead();
+                if(!nameFmtUsed){//named parameters have not occured yet, meaning primaries and expressions can be used as well
+                     if(token.type === "ID" && token2.type === "ASSIGN_EQUALS"){//asd.format(a=5)
+                        nameFmtUsed = true;
+                        expect("ID");
+                        expect("ASSIGN_EQUALS");
+                        parse_expr();
+                        namedParameters.push(token.id);
+
                         token = peek();//potentially set token to RPAREN and exit while loop
-                        if(token.type === "RPAREN"){//asd.format(a=5,)
-                            expect("RPAREN");
-                        }
-                    }else{
-                        if(token.type === "RPAREN"){//asd.format(a=5)
-                            expect("RPAREN");
+                        if(token.type === "COMMA"){//asd.format(a=5, ...)
+                            expect("COMMA");
+                            token = peek();//potentially set token to RPAREN and exit while loop
+                            if(token.type === "RPAREN"){//asd.format(a=5,)
+                                expect("RPAREN");
+                            }
                         }else{
-                            syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
+                            if(token.type === "RPAREN"){//asd.format(a=5)
+                                expect("RPAREN");
+                            }else{
+                                syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
+                            }
+                        }
+                    }else{//asd.format(primary/expression, ...)
+                        parse_expr();
+                        parameterCount++;
+                        token = peek();
+                        if(token.type === "COMMA"){//asd.format(primary/expression, ...)
+                            expect("COMMA");
+                            token = peek();//potentially set token to RPAREN and exit while loop
+                            if(token.type === "RPAREN"){//asd.format(primary/expression, ... , primary/expression,)
+                                expect("RPAREN");
+                            }
+                        }else{
+                            if(token.type === "RPAREN"){ //asd.format(primary/expression, ... , primary/expression)
+                                expect("RPAREN");
+                            }else{
+                                syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
+                            }
                         }
                     }
-                }else{//asd.format(primary/expression, ...)
-                    parse_expr();
-                    parameterCount++;
-                    token = peek();
-                    if(token.type === "COMMA"){//asd.format(primary/expression, ...)
-                        expect("COMMA");
+                }else{//Only named paramters can appear after they've been used once
+                    if(token.type === "ID" && token2.type === "ASSIGN_EQUALS"){ //asd.format(..., a=5, b=6, variable=...)
+                        expect("ID");
+                        expect("ASSIGN_EQUALS");
+                        parse_expr();
+                        namedParameters.push(token.id);
                         token = peek();//potentially set token to RPAREN and exit while loop
-                        if(token.type === "RPAREN"){//asd.format(primary/expression, ... , primary/expression,)
-                            expect("RPAREN");
-                        }
-                    }else{
-                        if(token.type === "RPAREN"){ //asd.format(primary/expression, ... , primary/expression)
-                            expect("RPAREN");
+                        if(token.type === "COMMA"){//asd.format(a=5, b=6, ...)
+                            expect("COMMA");
+                            token = peek();//potentially set token to RPAREN and exit while loop
+                            if(token.type === "RPAREN"){//asd.format(a=5, b=6, ... , z=10,)
+                                expect("RPAREN");
+                            }
                         }else{
-                            syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
+                            if(token.type === "RPAREN"){//asd.format(a=5, b=6, ... , z=10)
+                                expect("RPAREN");
+                            }else{
+                                syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
+                            }
                         }
+                    }else{//There was a violation as only the named format can be used now.
+                        syntax_error("ERROR_FORMAT_VIOLATION");
+                        break;
                     }
-                }
-            }else{//Only named paramters can appear after they've been used once
-                if(token.type === "ID" && token2.type === "ASSIGN_EQUALS"){ //asd.format(..., a=5, b=6, variable=...)
-                    expect("ID");
-                    expect("ASSIGN_EQUALS");
-                    parse_expr();
-                    namedParameters.push(token.id);
-                    token = peek();//potentially set token to RPAREN and exit while loop
-                    if(token.type === "COMMA"){//asd.format(a=5, b=6, ...)
-                        expect("COMMA");
-                        token = peek();//potentially set token to RPAREN and exit while loop
-                        if(token.type === "RPAREN"){//asd.format(a=5, b=6, ... , z=10,)
-                            expect("RPAREN");
-                        }
-                    }else{
-                        if(token.type === "RPAREN"){//asd.format(a=5, b=6, ... , z=10)
-                            expect("RPAREN");
-                        }else{
-                            syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
-                        }
-                    }
-                }else{//There was a violation as only the named format can be used now.
-                    syntax_error("ERROR_FORMAT_VIOLATION");
-                    break;
                 }
             }
         }
     }
-    //syntax is correct, check other constraints.
+    //syntax is correct, check other constraints for "somestring".format(...)
     if(type === "APOSTROPHE" || type === "QUOTE"){
         //TO DO
-        //re-edit the _format functions
-        //make a bracket check function that will occur after affirming that ordered and unordered aren't used together
-        //need to remake my solution for the brackets as I don't think it actually works right now
+        //document.write("hi<br>");
+        if(string_content.includes("{") || string_content.includes("}")){
+            validate_format_string(string_content, parameterCount, namedParameters);
+            document.write("hi2<br>");
+        }else{
+            //the string has no brackets, meaning there can be no syntax issues caused by different formats
+        }
     }
 }
 
+function validate_format_string(str, paraCount, namedPara){
+    var countValue = 0;
+    var autoPairValues = 0;
+    var manPairValues = [];
+    var namedPairValues = [];
+    var value = "";
+    var autoFmt = false;
+    var manFmt = false;
 
-
-/*
-Something like:
-
-lBrktExists = str.indexOf("{") !== -1;
-rBrktExists = str.indexOf("}") !== -1;
-
-//TO DO
-//could just make the is_Format() calls just the match function of the respective regular expression
-if(lBrktExists && rBrktExists){ //return array of matches
-	orderedPairs = used_pairings = substr.match(/{}/g);
-	unorderedPairs = substr.match(/{[0-9]+}/g);
-	namedPairs = substr.match(/{[A-Za-z_]+[A-Za-z0-9_]*}/g);
-	
-	if(orderedPairs.length > 0 && unorderedPairs.length > 0){
-		//INSERT SYNTAX ERROR
-		//Cannot use automatic and manual formats together
-	}else{ 
-		if(orderedPairs.length > 0){
-			ordered_format();
-		}else if(unorderedPairs.length > 0){
-			unordered_format();
-			}else{
-				if(namedPairs.length > 0){
-					named_format();
-				}else{//Brackets appear, but don't fit the format
-					//Potential syntax error
-					validBrackets();
-				}
-			}
-		}
-	}else{
-		//Maybe incorporate into validBrackets()
-		
-		if(lBrktExists){ //"hello there {name  ".format(name = "bob");
-			//Missing Right Bracket Pairing
-			//INSERT SYNTAX ERROR
-		}else if(rBrktExists){ //"hello there name}  ".format(name = "bob");
-			//Missing Left Bracket Pairing
-			//INSERT SYNTAX ERROR
-		}else{ //"hello there ".format(name = "bob");
-			//There are no Brackets at all, meaning the parameters inside the format function can't be used.
-		}
-	}
+    for(var i = 0; i < str.length; i++){
+        if(countValue === 0){
+            if(str[i] === "{"){
+                countValue++;
+            }else if(str[i] === "}"){
+                countValue--;
+            }else{
+                //else just read charcters in the string that are not bounded by brackets
+            }
+        }else if(countValue === 1){
+            if(str[i] === "{"){
+                if(value === ""){
+                    countValue--;
+                }else{
+                    //Unexpected '{' in field name
+                    syntax_error("");//INSERT SYNTAX ERROR
+                }
+            }else if(str[i] === "}"){
+                if(value === ""){
+                    if(manFmt){
+                        //ValueError: cannot switch from manual field specification to automatic field numbering
+                        syntax_error(""); //INSERT SYNTAX ERROR
+                    }else{
+                        autoFmt = true;
+                        autoPairValues++;
+                        value = "";
+                        countValue--;
+                    }
+                }else if(/^\d+$/.test(value)){
+                    if(autoFmt){
+                        //ValueError: cannot switch from automatic field numbering to manual field specification
+                        syntax_error(""); //INSERT SYNTAX ERROR
+                    }else{
+                        manFmt = true;
+                        manPairValues.push(value);
+                        value = "";
+                        countValue--;
+                    }
+                }else{
+                    namedPairValues.push(value);
+                    value = "";
+                    countValue--;
+                }
+            }else{
+                value += str[i];
+            }
+        }else if(countValue === -1){
+            if(str[i] === "}"){
+                countValue++;
+            }else{
+                //Single '}' encountered in format string
+                syntax_error("");//INSERT SYNTAX ERROR
+            }
+        }
+    }
+    
+    //countValue should be 0 after going through the entire string, otherwise there was an error
+    //where a either bracket appeared as the last character of the string. That, or the '{' bracket
+    //appeared only once in the string and there was no closing '}' bracket.
+    if(countValue === 1){
+        //Single '{' encountered in format string
+        syntax_error("");//INSERT SYNTAX ERROR
+    }else if(countValue === -1){
+        //Single '}' encountered in format string
+        syntax_error("");//INSERT SYNTAX ERROR
+    }else{
+        if(autoFmt && !manFmt){
+            automatic_format(autoPairValues, paraCount);
+            named_format(namedPairValues, namedPara);
+        }else if(manFmt && !autoFmt){
+            manual_format(manPairValues, paraCount);
+            named_format(namedPairValues, namedPara);
+        }else if(!autoFmt && !manFmt){
+            named_format(namedPairValues, namedPara);
+        }
+    }
 }
 
-Let's say that we've gotten the valid bracket pairs listed.
-We don't delete them from the original string content, but instead combine the arrays to compare the occurence.
-	i.e. [{}, {name}, {job}, {age}] or [{0}, {1}, {2}, {name}, {job}, {age}]
-	
-	If the number of {'s is even, then whatever follows doesn't matter yet.
-		The number of }'s must be even until the occurence of the next {.
-		Else the number of }'s is odd and doesn't having a matching pair.
-	If the number of {'s is odd, then whatever comes next must be one of the things in the list. Delete that element from the array.
-		The number of }'s must be odd until the occurenxe of the next {
-		Else the number of }'s must be even, meaning there is no matching { pair.
-	If the number of }'s is even, then whatever follows doesn't matter until the next {.
-	
-	If the number of }'s is odd, then there's a syntax error as there was no closing { pair before it.
-	
-	position = str.indexOf("{");
-	if(position === -1){
-		position 
-	}
-	while(position){
-		
-	}
-	
---------------------------------------------------------------------------------
-
-var lBrackets = str.match(/{+/g);
-var rBrackets = str.match(/}+/g);
-var l_place = 0;
-var r_place = 0;
-var l_finished = false;
-var r_finished = false;
-
-var l_or_r = -1;
-var even_or_odd = -1;
-
-if(lBrackets.length > 0 && rBrackets.length > 0){
-	
-	if(str.indexOf(lBrackets[l_place]) < str.indexOf(rBrackets[r_place])){
-		l_or_r = 0;
-		even_or_odd = lBrackets[l_place].length % 2;
-		l_place++;
-		if(lBrackets.length === l_place){
-			l_finished = true;
-		}
-	}else{
-		l_or_r = 1;
-		even_or_odd = rBrackets[r_place].length % 2;
-		if(even_or_odd){
-			
-		}
-		if(rBrackets.length === r_place){
-			syntax_error("");//INSERT SYNTAX ERROR
-		}
-	}
-	
-	
-	while(l_finished && r_finished){
-		if(l_finished){
-			
-		}else if(r_finished){
-			
-		}else{
-			if(str.indexOf(lBrackets[l_place]) < str.indexOf(rBrackets[r_place])){
-				even_or_odd = lBrackets[l_place].length % 2 === 0;
-				if(){ //The number of Left Brackets is even
-					l_place++;
-					
-				}else{//The number of Right Brackets is odd
-					
-				}
-			}
-		}
-		
-	}
-}else{
-	if(lBrackets.length === 0){
-		//INSERT SYNTAX ERROR
-		//Missing LBRACKET pair
-	}else if(rBrackets.length === 0){
-		//INSERT SYNTAX ERROR
-		//Missing RBRACKET pair
-	}else{
-		//Is a valid string
-	}
-}
-
--------------------------------------------------------------------------------------------------------
-Let's say that we've gotten the valid bracket pairs listed.
-We don't delete them from the original string content, but instead combine the arrays to compare the occurence.
-	i.e. [{}, {name}, {job}, {age}] or [{0}, {1}, {2}, {name}, {job}, {age}]
-	
-	If the number of {'s is even, then whatever follows doesn't matter yet.
-		The number of }'s must be even until the occurence of the next {.
-		Else the number of }'s is odd and doesn't having a matching pair.
-	If the number of {'s is odd, then whatever comes next must be one of the things in the list. Delete that element from the array.
-		The number of }'s must be odd until the occurence of the next {
-		Else the number of }'s must be even, meaning there is no matching { pair.
-	If the number of }'s is even, then whatever follows doesn't matter until the next {.
-	
-	If the number of }'s is odd, then there's a syntax error as there was no closing { pair before it.
-
-var bracket_pairs = b_pairs; // gotten from parameter
-var brackets = str.match(/{+|}+/g)
-
-if(brackets.length !== 0){
-	
-	var i = 0;
-	var curr_left_or_right = -1;
-	var prev_left_or_right = -1;
-	var curr_even_or_odd = -1;
-	var prev_even_or_odd = -1;
-	
-	while(!finished){
-		if(i === 0){
-			curr_left_or_right = brackets[i][0];
-			curr_even_or_odd = brackets[i].length % 2;
-			str = str.substring(str.indexOf(brackets[i]) + brackets[i].length);
-			i++;
-		}else{
-			prev_left_or_right = curr_left_or_right;
-			prev_even_or_odd = curr_even_or_odd;
-			
-			curr_left_or_right = brackets[i][0];
-			curr_even_or_odd = brackets[i].length % 2;
-			
-			if(prev_left_or_right === 0 && prev_even_or_odd === 0){ // ...{{...
-				
-			}else if(prev_left_or_right === 0 && prev_even_or_odd === 1){ // ...{{{...
-				if(curr_left_or_right === 1 && curr_even_or_odd === 1){ // {{{...}}}
-					var parameterValue = "{" + str.substring(0, str.indexOf(brackets[i])) + "}"
-					if(!bracket_pairs.includes(parameterValue)){
-						//INSERT SYNTAX ERROR
-					}else{
-						str = str.substring(str.indexOf(brackets[i]) + brackets[i].length);
-						i++;
-					}
-				}else if(curr_left_or_right === 1 && curr_even_or_odd === 0){
-					
-				}
-			}else if(prev_left_or_right === 1 && prev_even_or_odd === 0){ // ...}}...
-				
-			}else{ // ...}}}...
-				
-			}
-			
-		}
-		
-	}
-	
-	for(var i = 0; i < brackets.length; i++){
-		left_or_right = brackets[i][0];
-		even_or_odd = brackets[i].length % 2
-	}
-}
-}else{
-	//It's a string without brackets
-}
-
----------------------------------------------------------------------------------------------------
-Counting version...
-How to handle doubles
-
-
-
-var countValue = 0;
-var pairValues = [];
-var value = "";
-
-for(var i = 0; i < str.length; i++){
-	if(countValue === 0){
-		if(str[i] === "{"){
-			countValue++;
-		}else if(str[i] === "}"){
-			countValue--;
-		}else{
-			//else just read charcters in the string that are not bounded by brackets
-		}
-	}else if(countValue === 1){
-		if(str[i] === "{"){
-			if(value === ""){
-				countValue--;
-			}else{
-				//Unexpected '{' in field name
-				//INSERT SYNTAX ERROR
-			}
-		}else if(str[i] === "}"){
-			pairValues.push(value);
-			value = "";
-			countValue--;
-		}else{
-			value += str[i];
-		}
-	}else if(countValue === -1){
-		if(str[i] === "}"){
-			countValue++;
-		}else{
-			//Single '}' encountered in format string
-			//INSERT SYNTAX ERROR
-		}
-	}
-}
-
-//casts functions
-int bool
-str
-
-//min and max function
-
-//len
-
-//NO range
-
-
-
-
-
-
-
-
-
-*/
-
-function valid_brackets(content){
-	
-}
-
-
-
-function ordered_format(content, paraCount){
-	var substr = content;
-	var used_pairings = substr.match(/{}/g);
-	var orderCount = used_pairings.length;
-	var validIndices = true;
-	var validBrackets = true;
-	
-	// true: "string values {}{}{}{namedParameter}".format(1,2,3,namedParameter = "i")"
-	// false: "string values {}{}{}{}".format(1,2,3,namedParameter = "i")"
-	if(orderCount > paraCount){
-		validIndices = false;
-	}else{
-		for(var i = 0; i < orderCount; i++){
-			substr = substr.substring(0, substr.indexOf(used_pairings[i])) + substr.substring(substr.indexOf(used_pairings[i]) + used_pairings[i].length);
-		}
-		
-		var rBrackets = substr.match(/{+/g);
-		var lBrackets = substr.match(/}+/g);
-		for(var i = 0; i < rBrackets.length; i++){
-			if(rBrackets[i].length % 2 === 1){
-				validBrackets = false;
-			}
-		}
-		for(var i = 0; i < lBrackets.length; i++){
-			if(lBrackets[i].length % 2 === 1){
-				validBrackets = false;
-			}
-		}
-	}
-	
-	if(!validBrackets){
-		syntax_error("");//INSERT SYNTAX ERROR
-	}else if(!validIndices){
-		syntax_error("");//INSERT SYNTAX ERROR
-	}
-	
-	return orderCount;
-}
-
-function unordered_format(content, paraCount){
-	var substr = content;
-	var used_pairings = substr.match(/{[0-9]+}/g);
-	var unorderCount = used_pairings.length;
-	var validIndices = true;
-	var validBrackets = true;
-	
-	for(var i = 0; i < used_pairings.length; i++){
-		//TO DO
-		//need to compare the integer values
-		// true: "string values {0}{1}{2}{namedParameter}".format(1,2,3,namedParameter = "i")"
-		// false: "string values {0}{1}{1}{3}".format(1,2,3,namedParameter = "i")
-		if(substr.substring(1, used_pairings[i]-1) >= paraCount){
-			validIndices = false;
-		}else{
-			substr = substr.substring(0, substr.indexOf(used_pairings[i])) + substr.substring(substr.indexOf(used_pairings[i]) + used_pairings[i].length);
-		}
-	}
-	
-	if(validIndices){
-		var rBrackets = substr.match(/{+/g);
-		var lBrackets = substr.match(/}+/g);
-		for(var i = 0; i < rBrackets.length; i++){
-			if(rBrackets[i].length % 2 === 1){
-				validBrackets = false;
-			}
-		}
-		for(var i = 0; i < lBrackets.length; i++){
-			if(lBrackets[i].length % 2 === 1){
-				validBrackets = false;
-			}
-		}
-	}
-	
-	if(!validBrackets){
-		syntax_error("");//INSERT SYNTAX ERROR
-	}else if(!validIndices){
-		syntax_error("");//INSERT SYNTAX ERROR
-	}
-	
-	return unorderCount;
-}
-
-function named_format(content, namedPara){
-	var substr = content;
-	var used_pairings = substr.match(/{[A-Za-z_]+[A-Za-z0-9_]*}/g);
-	var namedCount = used_pairings.length;
-	var validParaNames = true;
-	var validBrackets = true;
-	
-	for(var i = 0; i < used_pairings.length; i++){
-		if(!namedPara.includes(substr.substring(1, used_pairings[i]-1))){
-			validParaNames = false;
-		}else{
-			substr = substr.substring(0, substr.indexOf(used_pairings[i])) + substr.substring(substr.indexOf(used_pairings[i]) + used_pairings[i].length);
-		}
-	}
-	
-	if(validParaNames){
-	var rBrackets = substr.match(/{+/g);
-	var lBrackets = substr.match(/}+/g);
-	for(var i = 0; i < rBrackets.length; i++){
-		if(rBrackets[i].length % 2 === 1){
-			validBrackets = false;
-		}
-	}
-	for(var i = 0; i < lBrackets.length; i++){
-		if(lBrackets[i].length % 2 === 1){
-			validBrackets = false;
-		}
-	}
-	
-	if(!validBrackets){
-		syntax_error("");//INSERT SYNTAX ERROR
-	}else if(!validParaNames){
-		syntax_error("");//INSERT SYNTAX ERROR
-	}
-	
-	return namedCount;
-}
-
-
-function parse_print_type(){
+function automatic_format(potentialPairs, paraCount){
+    var validIndices = true;
+    // true: "string values {}{}{}{namedParameter}".format(1,2,3,namedParameter = "i")"
+    // false: "string values {}{}{}{}".format(1,2,3,namedParameter = "i")"
+    if(potentialPairs.length >= paraCount){
+        validIndices = false;
+    }
+    
+    if(!validIndices){
+        //IndexError: tuple index out of range
+        syntax_error("");//INSERT SYNTAX ERROR
+    }
     
 }
 
-function parse_string_print(){
+function manual_format(potentialPairs, paraCount){
+    var validIndices = true;
     
+    for(var i = 0; i < potentialPairs.length; i++){
+        // true: "string values {0}{1}{2}{namedParameter}".format(1,2,3,namedParameter = "i")"
+        // false: "string values {0}{1}{2}{3}".format(1,2,3,namedParameter = "i")
+        if(parseInt(potentialPairs[i]) >= paraCount){
+            validIndices = false;
+        } 
+    }
+    
+    if(!validIndices){
+        //IndexError: tuple index out of range
+        syntax_error("");//INSERT SYNTAX ERROR
+    }
+
 }
 
-function parse_var_print(){
+function named_format(potentialPairs, namedPara){
+    var validParaNames = true;
+    var keyError = "";
     
-}
+    for(var i = 0; i < potentialPairs.length; i++){
+        if(!namedPara.includes(potentialPairs[i])){
+            validParaNames = false;
+            keyError = potentialPairs[i];
+        }
+    }
+    
+    if(!validParaNames){
+        //Key Error: 'keyError'
+        syntax_error("");//INSERT SYNTAX ERROR
+    }
 
-function parse_format_print(){
-    
-}
-
-function parse_unordered_print(){
-    
-}
-
-function parse_string_recursive(){
-    
-}
-
-//Should just be included with string recursive
-function parse_var_recursive(){
-    
-}
-
-function parse_ordered_format(){
-    
-}
-
-function parse_string_non_recursive(){
-    
-}
-
-function parse_var_non_recursive(){
-    
 }
 
 function parse_input_stmt(){
@@ -1655,4 +1220,61 @@ function parse_comment(){
         expect(token.type);
         token = peek();
     }
+}
+
+function syntax_error(errorType){
+    if (errorType === "UNKNOWN_SYMBOL"){
+        alert("Program contains unknown symbols!");
+        exit();
+    }else if (errorType === "INVALID_STATEMENT"){
+        alert("Invalid statement!");
+        exit();
+    }else if (errorType === "INDENTATION_ERROR"){
+        alert("Indentation error detected!");
+        exit();
+    }else if (errorType === "INVALID_COND_OPERATOR"){
+        alert("Invalid conditional operator!");
+        exit();
+    }else if (errorType === "INVALID_COMP_OPERATOR"){
+        alert("Invalid comparison operator!");
+        exit();
+    }else if (errorType === "INVALID_LINK"){
+        alert("Invalid comparison link!");
+        exit();
+    }else if (errorType === "INVALID_RANGE"){
+        alert("Invalid ranged specified!");
+        exit();
+    }else if (errorType === "INVALID_RHS"){
+        alert("Invalif right-hand side value/variable");
+        exit();
+    }else if (errorType === "INVALID_ASSIGNMENT"){
+        alert("Invalid assignment operation!");
+        exit();
+    }else if (errorType === "INVALID_ASSIGN_OPERATOR"){
+        alert("Invalid assignment operator!");
+        exit();
+    }else if (errorType === "INVALID_PRIMARY"){
+        alert("Invalid primary type!");
+        exit();
+    }else if (errorType === "NON_FORMAT_ERROR"){
+        alert("Only format() allowed!");
+        exit();
+    }else if (errorType === "INVALID_OPERATOR"){
+        alert("Invalid arithmetic operator!");
+        exit();
+    }else if (errorType === "ERROR_MISSING_RIGHT_PARENTHESIS"){
+        alert("Expecting right parenthesis!");
+        exit();
+    }else if (errorType === "ERROR_FORMAT_VIOLATION"){
+        alert("format() violation detected!");
+        exit();
+    }else if (errorType === "INVALID_INPUT"){
+        alert("Invalid input!");
+        exit();
+    }else{
+        //document.write("Unspecified Error<br>");
+        alert("Unspecified Error");
+        exit();
+    }
+    
 }
