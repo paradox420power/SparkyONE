@@ -445,8 +445,6 @@ function getToken(input){
                     if(input.charAt(0).match(numbers)){
                         if(isNumeric(input)){
                             lexeme = readNumber(input);
-                        }else{
-                            lexeme = readWord(input);
                         }
                     }else if(input !== ""){
                         lexeme = readWord(input);
