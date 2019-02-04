@@ -12,10 +12,10 @@ var keySymbol = ["=", "+", "-", "*", "/", "%", "<", ">", ":", ";",
 
 
 //python's reserved words that a user shouldn't be able to use out of context
-var reservedWord = ["True", "False", "None", "and", "as", "assert", "break", "class",
-    "continue", "def", "del", "elif", "else", "except", "finally", "for", "from",
-"global", "if", "import", "in", "is", "lambda", "my_range", "nonlocal", "not", "or", "pass", "print",
-"raise", "range", "return", "try", "while", "with", "xrange", "yield", "format", "input"];
+var reservedWord = ["True", "False", "None", "abs", "and", "as", "ascii", "assert", "bin", "bool", "break", "ceil", "chr", "class", "cos", 
+    "continue", "def", "del", "elif", "else", "except", "float", "floor", "finally", "for", "from", "global", "hex",
+    "if", "import", "in", "input", "int", "is", "lambda", "len", "max", "min", "my_range", "nonlocal", "not", "oct", "or", "ord", "pass", "print",
+    "raise", "randint", "random", "range", "return", "round", "seed", "sin", "str", "sqrt", "tan", "try", "type", "while", "with", "xrange", "yield", "format", "input"];
 
 var code_line = 1;
 
