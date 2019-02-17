@@ -26,47 +26,390 @@ function getChar(myString){
     return nextChar;
 }
 
-function isNumeric(input){
-    var isNumeric = true;
-    var numbers = /^[0-9]+$/;
+function isBinary(input){
+    var isBinary = true;
+    var bin = /^[0-1]+$/;
     var incomplete = true;
     var charCheck = "";
     var charCheckIndex = 0;
+    if(charCheckIndex < input.length){ //headed by 0b, ensure that is checked
+        charCheck = input.charAt(charCheckIndex);
+        if(charCheck === '0'){
+            charCheckIndex++;
+            if(charCheckIndex < input.length){
+                charCheck = input.charAt(charCheckIndex);
+                if(charCheck === 'b'){
+                    charCheckIndex++;
+                }else{ //starts 0, but isn't followed b 'b'
+                    isBinary = false;
+                    incomplete = false;
+                }
+            }
+        }else{
+            isBinary = false;
+            incomplete = false;
+        }
+    }
     while(incomplete){
         if(charCheckIndex < input.length){ //still have input to read
             charCheck = input.charAt(charCheckIndex);
-            if(charCheck.match(numbers)){ //still a valid numeric input
+            if(charCheck.match(bin)){ //still a valid binary input
                 charCheckIndex++;
-            }else if(charCheck === "."){ //ensure not a floating point numeric
-                charCheckIndex++;//move to next char
-                while(incomplete){
-                    if(charCheckIndex < input.length){
-                        charCheck = input.charAt(charCheckIndex);
-                        if(charCheck.match(numbers))
-                            charCheckIndex++;
-                        else{
-                            if(keySymbol.includes(charCheck)){ //checks if next character is an acceptable follow to the varaible
-                                incomplete = false; //we hit the next space
-                                charCheckIndex--; //unget that last index since it is next in sequence
-                            }else{ //not followed by key Symbol, which makes it not a number
-                                isNumeric = false;
-                                incomplete = false;
-                            }
-                        }
-                    }
-                }
             }else{
                 if(keySymbol.includes(charCheck)){ //checks if next character is an acceptable follow to the varaible
                     incomplete = false; //we hit the next space
                     charCheckIndex--; //unget that last index since it is next in sequence
-                }else{ //not followed by key Symbol, which makes it not a number
-                    isNumeric = false;
+                }else{ //not followed by key Symbol, which makes it not a binary
+                    isBinary = false;
                     incomplete = false;
                 }
             }
         }else{ //end of input
+            if(charCheckIndex === 2)
+                isBinary = false; //only 0b read, not a binary
             incomplete = false;
             charCheckIndex--;
+        }
+    }
+    return isBinary;
+}
+
+function readBin(input){
+    var lexeme = {
+        id:"", //the exact input from the string
+        type:"BINARY", //what the token is classified as
+        line_no: code_line, //what line of code the token is on
+        length: 0 //used to remove the lexeme including preceding spaces from input string upon return
+    };
+    
+    var bin = /^[0-1]+$/;
+    var incomplete = true;
+    var charCheck = "";
+    var charCheckIndex = 0;
+    //get '0b' appended to id, and go from there
+    charCheck = input.charAt(charCheckIndex);
+    lexeme.id += charCheck;
+    charCheckIndex++;
+    charCheck = input.charAt(charCheckIndex);
+    lexeme.id += charCheck;
+    charCheckIndex++;
+    //continue reading binary
+    while(incomplete){
+        if(charCheckIndex < input.length){
+            charCheck = input.charAt(charCheckIndex);
+            if(charCheck.match(bin)){
+                lexeme.id += charCheck;
+                charCheckIndex++;
+            }else if(keySymbol.includes(charCheck)){ //checks if next character is an acceptable follow to the varaible
+                    incomplete = false; //we hit the next space
+                    charCheckIndex--; //unget that last index since it is next in sequence
+                }else{ //not followed by key Symbol, which makes it not a binary
+                    incomplete = false;
+                }
+        }else{
+            incomplete = false;
+            charCheckIndex--;
+        }
+    }
+    lexeme.length = charCheckIndex + 1;
+    return lexeme;
+}
+
+function isOct(input){
+    var isOctal = true;
+    var oct = /^[0-8]+$/;
+    var incomplete = true;
+    var charCheck = "";
+    var charCheckIndex = 0;
+    if(charCheckIndex < input.length){ //headed by 0o, ensure that is checked
+        charCheck = input.charAt(charCheckIndex);
+        if(charCheck === '0'){
+            charCheckIndex++;
+            if(charCheckIndex < input.length){
+                charCheck = input.charAt(charCheckIndex);
+                if(charCheck === 'o'){
+                    charCheckIndex++;
+                }else{ //starts 0, but isn't followed by 'o'
+                    isOctal = false;
+                    incomplete = false;
+                }
+            }
+        }else{
+            isOctal = false;
+            incomplete = false;
+        }
+    }
+    while(incomplete){
+        if(charCheckIndex < input.length){ //still have input to read
+            charCheck = input.charAt(charCheckIndex);
+            if(charCheck.match(oct)){ //still a valid octal input
+                charCheckIndex++;
+            }else if(keySymbol.includes(charCheck)){ //checks if next character is an acceptable follow to the varaible
+                incomplete = false; //we hit the next space
+                charCheckIndex--; //unget that last index since it is next in sequence
+            }else{ //not followed by key Symbol, which makes it not a octal
+                isOctal = false;
+                incomplete = false;
+            }
+        }else{ //end of input
+            if(charCheckIndex === 2)
+                isOctal = false; //only 0o read, not a octal
+            incomplete = false;
+            charCheckIndex--;
+        }
+    }
+    return isOctal;
+}
+
+function readOct(input){
+    var lexeme = {
+        id:"", //the exact input from the string
+        type:"OCTAL", //what the token is classified as
+        line_no: code_line, //what line of code the token is on
+        length: 0 //used to remove the lexeme including preceding spaces from input string upon return
+    };
+    
+    var bin = /^[0-8]+$/;
+    var incomplete = true;
+    var charCheck = "";
+    var charCheckIndex = 0;
+    //get '0o' appended to id, and go from there
+    charCheck = input.charAt(charCheckIndex);
+    lexeme.id += charCheck;
+    charCheckIndex++;
+    charCheck = input.charAt(charCheckIndex);
+    lexeme.id += charCheck;
+    charCheckIndex++;
+    //continue reading octal
+    while(incomplete){
+        if(charCheckIndex < input.length){
+            charCheck = input.charAt(charCheckIndex);
+            if(charCheck.match(bin)){
+                lexeme.id += charCheck;
+                charCheckIndex++;
+            }else if(keySymbol.includes(charCheck)){ //checks if next character is an acceptable follow to the varaible
+                incomplete = false; //we hit the next space
+                charCheckIndex--; //unget that last index since it is next in sequence
+            }else{ //not followed by key Symbol, which makes it not a octal
+                incomplete = false;
+            }
+        }else{
+            incomplete = false;
+            charCheckIndex--;
+        }
+    }
+    lexeme.length = charCheckIndex + 1;
+    return lexeme;
+}
+
+function isHex(input){
+    var isHex = true;
+    var hexNums = /^[0-9]+$/;
+    var hexVals = /^[a-f]+$/;
+    var hexVals2 = /^[A-F]+$/;
+    var incomplete = true;
+    var charCheck = "";
+    var charCheckIndex = 0;
+    if(charCheckIndex < input.length){ //headed by 0x, ensure that is checked
+        charCheck = input.charAt(charCheckIndex);
+        if(charCheck === '0'){
+            charCheckIndex++;
+            if(charCheckIndex < input.length){
+                charCheck = input.charAt(charCheckIndex);
+                if(charCheck === 'x'){
+                    charCheckIndex++;
+                }else{ //starts 0, but isn't followed by 'x'
+                    isHex = false;
+                    incomplete = false;
+                }
+            }
+        }else{
+            isHex = false;
+            incomplete = false;
+        }
+    }
+    while(incomplete){
+        if(charCheckIndex < input.length){ //still have input to read
+            charCheck = input.charAt(charCheckIndex);
+            if(charCheck.match(hexVals) || charCheck.match(hexNums) || charCheck.match(hexVals2)){ //still a valid hex input
+                charCheckIndex++;
+            }else if(keySymbol.includes(charCheck)){ //checks if next character is an acceptable follow to the varaible
+                incomplete = false; //we hit the next space
+                charCheckIndex--; //unget that last index since it is next in sequence
+            }else{ //not followed by key Symbol, which makes it not a hex
+                isHex = false;
+                incomplete = false;
+            }
+        }else{ //end of input
+            if(charCheckIndex === 2)
+                isHex = false; //only 0x read, not a hex
+            incomplete = false;
+            charCheckIndex--;
+        }
+    }
+    return isHex;
+}
+
+function readHex(input){
+    var lexeme = {
+        id:"", //the exact input from the string
+        type:"HEX", //what the token is classified as
+        line_no: code_line, //what line of code the token is on
+        length: 0 //used to remove the lexeme including preceding spaces from input string upon return
+    };
+    
+    var hexNums = /^[0-9]+$/;
+    var hexVals = /^[a-f]+$/;
+    var hexVals2 = /^[A-F]+$/;
+    var incomplete = true;
+    var charCheck = "";
+    var charCheckIndex = 0;
+    //get '0x' appended to id, and go from there
+    charCheck = input.charAt(charCheckIndex);
+    lexeme.id += charCheck;
+    charCheckIndex++;
+    charCheck = input.charAt(charCheckIndex);
+    lexeme.id += charCheck;
+    charCheckIndex++;
+    //continue reading binary
+    while(incomplete){
+        if(charCheckIndex < input.length){
+            charCheck = input.charAt(charCheckIndex);
+            if(charCheck.match(hexNums) || charCheck.match(hexVals) || charCheck.match(hexVals2)){
+                lexeme.id += charCheck;
+                charCheckIndex++;
+            }else if(keySymbol.includes(charCheck)){ //checks if next character is an acceptable follow to the varaible
+                incomplete = false; //we hit the next space
+                charCheckIndex--; //unget that last index since it is next in sequence
+            }else{ //not followed by key Symbol, which makes it not a hex
+                incomplete = false;
+            }
+        }else{
+            incomplete = false;
+            charCheckIndex--;
+        }
+    }
+    lexeme.length = charCheckIndex + 1;
+    return lexeme;
+}
+
+function isNumeric(input){
+    var isNumeric = false; //false until proven true
+    var numbers = /^[0-9]+$/;
+    var incomplete = true;
+    var charCheck = "";
+    var charCheckIndex = 0;
+    if(charCheckIndex < input.length){ //only read within input bounds
+        charCheck = input.charAt(charCheckIndex);
+    }
+    while(incomplete){ //read until end, '.', or 'e/E'
+        if(charCheck === '0'){ //acceptable are 0..0e###, 0..0.###, or 00...
+            charCheckIndex++; //go to next character
+            if(charCheckIndex < input.length){
+                while(incomplete){
+                    charCheck = input.charAt(charCheckIndex); //get character in bounds
+                    if(charCheck === '0'){ //acceptable
+                        charCheckIndex++; //read next character
+                        if(charCheckIndex >= input.length){ //this increment exceeds input bounds
+                            incomplete = false;
+                            isNumeric = true; //only 0s read
+                        }
+                    }else if(charCheck === '.'){ //acceptable
+                        incomplete = false; //set to false, but don't update the charCheck
+                    }else if(charCheck === 'e' || charCheck === 'E'){ //acceptable
+                        incomplete = false; //set to false, but don't update the charCheck
+                    }else if(keySymbol.includes(charCheck)){ //end of this numeric, acceptable
+                        incomplete = false; //we've reached the end of this token
+                        isNumeric = true; //only 0s should've been read
+                    }else{ //followed by an unacceptable character, not legal numeric
+                        incomplete = false; //input is 0..00# which is unacceptable
+                    }
+                }
+            }else{ //input is 0 in totality, return is numeric
+                isNumeric = true;
+                incomplete = false;
+            }
+        }else if(charCheck === '.'){ //can be .####
+            incomplete = false; //exit this loop & proceed to the post decimal loop
+        }else if(charCheck.match(numbers)){//this check is technically 1-9 since 0 was checked above
+            charCheckIndex++; //go to next character
+            if(charCheckIndex < input.length){
+                while(incomplete){
+                    charCheck = input.charAt(charCheckIndex); //get character in bounds
+                    if(charCheck.match(numbers)){ //acceptable number
+                        charCheckIndex++; //read next character
+                        if(charCheckIndex >= input.length){ //this increment exceeds input bounds
+                            incomplete = false;
+                            isNumeric = true; //only #s read, it is fine
+                        }
+                    }else if(charCheck === '.'){ //acceptable
+                        incomplete = false; //set to false, but don't update the charCheck
+                    }else if(charCheck === 'e' || charCheck === 'E'){ //acceptable
+                        incomplete = false; //set to false, but don't update the charCheck
+                    }else if(keySymbol.includes(charCheck)){ //end of this numeric, acceptable
+                        incomplete = false; //we've reached the end of this token
+                        isNumeric = true; //only #s should've been read
+                    }else{ //followed by an unacceptable character, not legal numeric
+                        incomplete = false; //input is ##..##s or something
+                    }
+                }
+            }
+        }else{ //either isn't a number or is 'e/E' which can't start a numeric
+            incomplete = false;
+            if(charCheck === 'e' || charCheck === 'E') //need to change value or it might enter the loop below
+                charCheck = 'x';
+        }
+    }
+    if(charCheck === '.'){ //if looking at '.', validate the numbers after this character
+        incomplete = true; //there is more to be read
+        charCheckIndex++;
+        if(charCheckIndex < input.length){ //still in bounds after this char
+            while(incomplete){
+                charCheck = input.charAt(charCheckIndex);
+                if(charCheck.match(numbers)){
+                    charCheckIndex++;
+                    if(charCheckIndex >= input.length){
+                        incomplete = false;
+                        isNumeric= true; //##.## read
+                    }
+                }else if(keySymbol.includes(charCheck)){ //can have follow symbol whenever, 00.; is legal
+                    incomplete = false;
+                    isNumeric = true;
+                }else if(charCheck === 'e' || charCheck === 'E'){
+                    incomplete = false; //can be followed by 'e/E' but still needs checking
+                }else{
+                    incomplete = false; //invalid follow char detected
+                }
+            }
+        }else{ //actually legal to follow '.' with nothing
+            incomplete = false;
+            isNumeric = true;
+        }
+    }
+    if(charCheck === 'e' || charCheck === 'E'){ //still need to validate some #s
+        incomplete = true; //there is more to be read
+        charCheckIndex++;
+        if(charCheckIndex < input.length){ //still in bounds after this char
+            charCheck = input.charAt(charCheckIndex); //check 'e/E' is followed by at least 1 #
+            if(!charCheck.match(numbers)) //if not followed by a number we have #e; which is illegal
+                incomplete = false; //do not enter the while loop
+            while(incomplete){
+                charCheck = input.charAt(charCheckIndex);
+                if(charCheck.match(numbers)){
+                    charCheckIndex++;
+                    if(charCheckIndex >= input.length){
+                        incomplete = false;
+                        isNumeric = true;
+                    }
+                }else if(keySymbol.includes(charCheck)){
+                    incomplete = false;
+                    isNumeric = true;
+                }else{
+                    incomplete = false; //illegal char read
+                }
+            }
+        }else{ //not legal to follow 'e/E' with nothing
+            incomplete = false;
         }
     }
     
@@ -85,49 +428,122 @@ function readNumber(input){
     var incomplete = true;
     var charCheck = "";
     var charCheckIndex = 0;
-    while(incomplete){
-        if(charCheckIndex < input.length){ //still have input to read
-            charCheck = input.charAt(charCheckIndex);
-            if(charCheck.match(numbers)){ //still a valid numeric input
-                lexeme.id += charCheck;
-                charCheckIndex++;
-            }else if(charCheck === "."){ //ensure not a floating point numeric
-                lexeme.id += charCheck; //add "." to name
-                lexeme.type = "FLOAT"; //update type
-                charCheckIndex++;//move to next char
+    
+    if(charCheckIndex < input.length){ //only read within input bounds
+        charCheck = input.charAt(charCheckIndex);
+    }
+    while(incomplete){ //read until end, '.', or 'e/E'
+        if(charCheck === '0'){ //acceptable are 0..0e###, 0..0.###, or 00...
+            lexeme.id += charCheck;
+            charCheckIndex++; //go to next character
+            if(charCheckIndex < input.length){
                 while(incomplete){
-                    if(charCheckIndex < input.length){
-                        charCheck = input.charAt(charCheckIndex);
-                        if(charCheck.match(numbers)){
-                            lexeme.id += charCheck;
-                            charCheckIndex++;
-                        }else{
-                            if(keySymbol.includes(charCheck) && charCheck !== "."){ //checks if next character is an acceptable follow to the varaible, cannot be "." bacuse that could mean 3.1.5 as a float, period, number
-                                incomplete = false; //we hit the next space
-                                charCheckIndex--; //unget that last index since it is next in sequence
-                            }else{ //not followed by key Symbol, which makes it not a number
-                                lexeme.id = "Error";
-                                lexeme.type = "Error";
-                                incomplete = false;
-                            }
+                    charCheck = input.charAt(charCheckIndex); //get character in bounds
+                    if(charCheck === '0'){ //acceptable
+                        lexeme.id += charCheck;
+                        charCheckIndex++; //read next character
+                        if(charCheckIndex >= input.length){ //this increment exceeds input bounds
+                            incomplete = false;
                         }
+                    }else if(charCheck === '.'){ //acceptable
+                        incomplete = false; //set to false, but don't update the charCheck
+                    }else if(charCheck === 'e' || charCheck === 'E'){ //acceptable
+                        incomplete = false; //set to false, but don't update the charCheck
+                    }else if(keySymbol.includes(charCheck)){ //end of this numeric, acceptable
+                        incomplete = false; //we've reached the end of this token
+                    }else{ //followed by an unacceptable character, not legal numeric
+                        incomplete = false; //input is 0..00# which is unacceptable
                     }
                 }
-            }else{
-                if(keySymbol.includes(charCheck)){ //checks if next character is an acceptable follow to the varaible
-                    incomplete = false; //we hit the next space
-                    charCheckIndex--; //unget that last index since it is next in sequence
-                }else{ //not followed by key Symbol, which makes it not a number
-                    incomplete = false;
+            }else{ //input is 0 in totality, return is numeric
+                isNumeric = true;
+                incomplete = false;
+            }
+        }else if(charCheck === '.'){ //can be .####
+            incomplete = false; //exit this loop & proceed to the post decimal loop
+        }else if(charCheck.match(numbers)){//this check is technically 1-9 since 0 was checked above
+            lexeme.id += charCheck;
+            charCheckIndex++; //go to next character
+            if(charCheckIndex < input.length){
+                while(incomplete){
+                    charCheck = input.charAt(charCheckIndex); //get character in bounds
+                    if(charCheck.match(numbers)){ //acceptable number
+                        lexeme.id += charCheck;
+                        charCheckIndex++; //read next character
+                        if(charCheckIndex >= input.length){ //this increment exceeds input bounds
+                            incomplete = false;
+                        }
+                    }else if(charCheck === '.'){ //acceptable
+                        incomplete = false; //set to false, but don't update the charCheck
+                    }else if(charCheck === 'e' || charCheck === 'E'){ //acceptable
+                        incomplete = false; //set to false, but don't update the charCheck
+                    }else if(keySymbol.includes(charCheck)){ //end of this numeric, acceptable
+                        incomplete = false; //we've reached the end of this token
+                    }else{ //followed by an unacceptable character, not legal numeric
+                        incomplete = false; //input is ##..##s or something
+                    }
                 }
             }
-        }else{ //end of input
+        }else{ //either isn't a number or is 'e/E' which can't start a numeric
             incomplete = false;
-            charCheckIndex--;
+            if(charCheck === 'e' || charCheck === 'E') //need to change value or it might enter the loop below
+                charCheck = 'x';
         }
     }
-    lexeme.length = charCheckIndex + 1; //since charIndex started at 0, the returned length of the variable is the +1
-    
+    if(charCheck === '.'){ //if looking at '.', validate the numbers after this character
+        incomplete = true; //there is more to be read
+        lexeme.id += charCheck;
+        lexeme.type = "FLOAT"; //update type since it is now a known float
+        charCheckIndex++;
+        if(charCheckIndex < input.length){ //still in bounds after this char
+            while(incomplete){
+                charCheck = input.charAt(charCheckIndex);
+                if(charCheck.match(numbers)){
+                    lexeme.id += charCheck;
+                    charCheckIndex++;
+                    if(charCheckIndex >= input.length){
+                        incomplete = false;
+                    }
+                }else if(keySymbol.includes(charCheck)){ //can have follow symbol whenever, 00.; is legal
+                    incomplete = false;
+                }else if(charCheck === 'e' || charCheck === 'E'){
+                    incomplete = false; //can be followed by 'e/E' but still needs checking
+                }else{
+                    incomplete = false; //invalid follow char detected
+                }
+            }
+        }else{ //actually legal to follow '.' with nothing
+            incomplete = false;
+            isNumeric = true;
+        }
+    }
+    if(charCheck === 'e' || charCheck === 'E'){ //still need to validate some #s
+        incomplete = true; //there is more to be read
+        lexeme.id += charCheck;
+        charCheckIndex++;
+        if(charCheckIndex < input.length){ //still in bounds after this char
+            charCheck = input.charAt(charCheckIndex); //check 'e/E' is followed by at least 1 #
+            if(!charCheck.match(numbers)) //if not followed by a number we have #e; which is illegal
+                incomplete = false; //do not enter the while loop
+            while(incomplete){
+                charCheck = input.charAt(charCheckIndex);
+                if(charCheck.match(numbers)){
+                    lexeme.id += charCheck;
+                    charCheckIndex++;
+                    if(charCheckIndex >= input.length){
+                        incomplete = false;
+                    }
+                }else if(keySymbol.includes(charCheck)){
+                    incomplete = false;
+                }else{
+                    incomplete = false; //illegal char read
+                }
+            }
+        }else{ //not legal to follow 'e/E' with nothing
+            incomplete = false;
+        }
+    }
+    lexeme.length = charCheckIndex; //since charIndex started at 0, the returned length of the variable is the +1
     return lexeme;
 }
 
@@ -418,9 +834,13 @@ function getToken(input){
                 lexeme.length++;
                 break;
             case ".":
-                lexeme.id = ".";
-                lexeme.type = "PERIOD";
-                lexeme.length++;
+                if(isNumeric(input)){ //double check .###
+                    lexeme = readNumber(input);
+                }else{
+                    lexeme.id = ".";
+                    lexeme.type = "PERIOD";
+                    lexeme.length++;
+                }
                 break;
             case " ":
                 if(input.charAt(1) === " ") //only parse next char if it is another space, otheriwse prepare to return
@@ -442,9 +862,19 @@ function getToken(input){
             default:
                 if(!(keySymbol.includes(input.charAt(0)))){
                     var numbers = /^[0-9]+$/;
-                    if(input.charAt(0).match(numbers)){
-                        if(isNumeric(input)){
+                    if(input.charAt(0).match(numbers)){ //this one check can catch bin,oct,num, & hex, broken down within
+                        if(isNumeric(input)){ //assume it to be a number first
                             lexeme = readNumber(input);
+                        }else if(isBinary(input)){ //might start with 0b
+                            lexeme = readBin(input);
+                        }else if(isOct(input)){ //might xtart with 0o
+                            lexeme = readOct(input);
+                        }else if(isHex(input)){ //might start with 0x
+                            lexeme = readHex(input);
+                        }else{ //starts with 0 or # & isn't bin, oct, num, or hex so it is an error
+                            lexeme.id = "error";
+                            lexeme.type = "unchecked symbol";
+                            lexeme.length++; //length won't matter on an error
                         }
                     }else if(input !== ""){
                         lexeme = readWord(input);
