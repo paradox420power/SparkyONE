@@ -38,7 +38,7 @@ function isBinary(input){
             charCheckIndex++;
             if(charCheckIndex < input.length){
                 charCheck = input.charAt(charCheckIndex);
-                if(charCheck === 'b'){
+                if(charCheck === 'b' || charCheck === 'B'){
                     charCheckIndex++;
                 }else{ //starts 0, but isn't followed b 'b'
                     isBinary = false;
@@ -127,7 +127,7 @@ function isOct(input){
             charCheckIndex++;
             if(charCheckIndex < input.length){
                 charCheck = input.charAt(charCheckIndex);
-                if(charCheck === 'o'){
+                if(charCheck === 'o' || charCheck === 'O'){
                     charCheckIndex++;
                 }else{ //starts 0, but isn't followed by 'o'
                     isOctal = false;
@@ -216,7 +216,7 @@ function isHex(input){
             charCheckIndex++;
             if(charCheckIndex < input.length){
                 charCheck = input.charAt(charCheckIndex);
-                if(charCheck === 'x'){
+                if(charCheck === 'x' || charCheck === 'X'){
                     charCheckIndex++;
                 }else{ //starts 0, but isn't followed by 'x'
                     isHex = false;
@@ -686,6 +686,10 @@ function getToken(input){
                     lexeme.length++;
                     lexeme.id = "*=";
                     lexeme.type = "MULT_ASSIGN";
+                }else if(input.charAt(1) === "*"){
+                    lexeme.length++;
+                    lexeme.id = "**";
+                    lexeme.type = "EXPONENTIAL";
                 }else{
                     lexeme.id = "*";
                     lexeme.type = "MULT";
