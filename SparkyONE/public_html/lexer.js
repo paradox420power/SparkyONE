@@ -18,12 +18,39 @@ var reservedWord = ["True", "False", "None", "abs", "and", "as", "ascii", "asser
     "raise", "randint", "random", "range", "return", "round", "seed", "sin", "str", "sqrt", "tan", "try", "type", "while", "with", "xrange", "yield", "format", "input"];
 
 var code_line = 1;
+var lastTokenType = ""; //used to help differentiate +, ++, & +-+-++3... because python
 
 function getChar(myString){
     var nextChar = null;
     if(myString.length > 0)
         nextChar = myString.charAt(0);
     return nextChar;
+}
+
+//some numbers have n-many + or - before the number, & those should be accounted for
+function readPrefixOps(input){
+    var prefixOps = {
+        id: "",
+        length: 0
+    };
+    var incomplete = true;
+    var charCheck = "";
+    var charCheckIndex= 0;
+    while(incomplete){
+        if(charCheckIndex < input.length){
+            charCheck = input.charAt(charCheckIndex);
+            if(charCheck === '+' || charCheck === '-'){
+                prefixOps.id += charCheck;
+                prefixOps.length++;
+                charCheckIndex++;
+            }else{
+                incomplete = false;
+            }
+        }else
+            incomplete = false;
+        
+    }
+    return prefixOps;
 }
 
 function isBinary(input){
@@ -353,6 +380,9 @@ function isNumeric(input){
                         incomplete = false; //input is ##..##s or something
                     }
                 }
+            }else{ //only 1 char read & it was a numeric
+                incomplete = false;
+                isNumeric = true;
             }
         }else{ //either isn't a number or is 'e/E' which can't start a numeric
             incomplete = false;
@@ -412,7 +442,6 @@ function isNumeric(input){
             incomplete = false;
         }
     }
-    
     return isNumeric;
 }
 
@@ -483,6 +512,8 @@ function readNumber(input){
                         incomplete = false; //input is ##..##s or something
                     }
                 }
+            }else{
+                incomplete = false;
             }
         }else{ //either isn't a number or is 'e/E' which can't start a numeric
             incomplete = false;
@@ -633,6 +664,7 @@ function readString(input){
     return lexeme;
 }
 
+
 /*calling getToken reads character by character against valid inputs & will return the exact input
  * as lexeme.id, the token type as lexeme.type, what line it was encountered on as lexeme.line_no,
  * and the length of the input which will be should be removed from the input after return (i.e. call input.slice(length))
@@ -648,11 +680,22 @@ function getToken(input){
     /*["=", "+", "-", "*", "/", "%", "^", "<", ">", ":", ";",
     "(", ")", "[", "]", "{", "}", ",", ".", "\"", "\'", "\\", " ", "\n"];*/
     
+    //if the last token was any of the following there might be a special case
+    var operators = ["PLUS", "ADD_ASSIGN", "SUB", "SUB_ASSIGN", "MULT", "MULT_ASSIGN", "EXPONENTIAL",
+                    "DIV", "DIV_ASSIGN", "MOD", "MOD_ASSIGN", "GREATER_THAN", "GREATER_THAN_EQUAL",
+                    "LESS_THAN", "LESS_THAN_EQUAL", "NOT_EQUAL", "COMPARE_EQUALS", "ASSIGN_EQUALS",
+                    "LPAREN", "RPAREN", "LBRACE", "RBRACE", "LBRACKET", "RBRACKET"]; //these might be followed by a number prefaced by + or -
+    var mathIndicators = ["NUMBER", "FLOAT", "BINARY", "OCTAL", "HEX"]; //a + or - prefaced by this should be careful
+    var numbers = /^[0-9]+$/;
     if(input !== null || input !== ""){
-        switch(input.charAt(0)){
+        var nextChar = input.charAt(0);
+        if(operators.includes(lastTokenType) && (nextChar === '+' || nextChar === '-')){ //in this case we have something lik 3--3 which is special case Number, Minus, Number
+            nextChar = 'x'; //this can be anything that isn't a dedicated case, just so long as it goes to the default
+        }
+        switch(nextChar){
             case "+":
                 lexeme.length++;
-                if(input.charAt(1) === "+"){
+                if(input.charAt(1) === "+" && mathIndicators.includes(lastTokenType) && input.charAt(2) !== "+" && input.charAt(2) !== "-"){ //3++ is increment, but 3++3 is not
                     lexeme.id = "++";
                     lexeme.type = "INCREMENT";
                     lexeme.length++;
@@ -667,7 +710,7 @@ function getToken(input){
                 break;
             case "-":
                 lexeme.length++;
-                if(input.charAt(1) === "-"){
+                if(input.charAt(1) === "-" && mathIndicators.includes(lastTokenType) && input.charAt(2) !== "+" && input.charAt(2) !== "-"){ //3-- is decrement, but 3--3 is not
                     lexeme.id = "--";
                     lexeme.type = "DECREMENT";
                     lexeme.length++;
@@ -864,23 +907,39 @@ function getToken(input){
                 lexeme.length++;
                 break;
             default:
-                if(!(keySymbol.includes(input.charAt(0)))){
+                if(!(keySymbol.includes(input.charAt(0))) || input.charAt(0) === '+' || input.charAt(0) === '-'){
                     var numbers = /^[0-9]+$/;
+                    var prefixOps ={
+                        id: "",
+                        length: 0
+                    };
+                    if(input.charAt(0) === '+' || input.charAt(0) === '-'){ //numbers can be prefaced by + & -
+                        prefixOps = readPrefixOps(input);
+                        input = input.slice(prefixOps.length);
+                    }
                     if(input.charAt(0).match(numbers)){ //this one check can catch bin,oct,num, & hex, broken down within
                         if(isNumeric(input)){ //assume it to be a number first
                             lexeme = readNumber(input);
+                            lexeme.id = prefixOps.id + "" + lexeme.id; //append any prefix ops to front of the number
+                            lexeme.length += prefixOps.length;
                         }else if(isBinary(input)){ //might start with 0b
                             lexeme = readBin(input);
+                            lexeme.id = prefixOps.id + "" + lexeme.id; //append any prefix ops to front of the number
+                            lexeme.length += prefixOps.length;
                         }else if(isOct(input)){ //might xtart with 0o
                             lexeme = readOct(input);
+                            lexeme.id = prefixOps.id + "" + lexeme.id; //append any prefix ops to front of the number
+                            lexeme.length += prefixOps.length;
                         }else if(isHex(input)){ //might start with 0x
                             lexeme = readHex(input);
+                            lexeme.id = prefixOps.id + "" + lexeme.id; //append any prefix ops to front of the number
+                            lexeme.length += prefixOps.length;
                         }else{ //starts with 0 or # & isn't bin, oct, num, or hex so it is an error
                             lexeme.id = "error";
                             lexeme.type = "unchecked symbol";
                             lexeme.length++; //length won't matter on an error
                         }
-                    }else if(input !== ""){
+                    }else if(input !== "" && prefixOps.length === 0){
                         lexeme = readWord(input);
                     }else{
                         lexeme.id = "end";
@@ -900,6 +959,7 @@ function getToken(input){
         lexeme.type = "END_OF_FILE";
     }
     
+    lastTokenType = lexeme.type; //store this for next token differentiation
     return lexeme;
 }
 
