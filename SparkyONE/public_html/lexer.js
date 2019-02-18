@@ -695,7 +695,7 @@ function getToken(input){
         switch(nextChar){
             case "+":
                 lexeme.length++;
-                if(input.charAt(1) === "+" && mathIndicators.includes(lastTokenType) && input.charAt(2) !== "+" && input.charAt(2) !== "-"){ //3++ is increment, but 3++3 is not
+                if(input.charAt(1) === "+" && !mathIndicators.includes(lastTokenType)){ //3++ is increment, but 3++3 is not
                     lexeme.id = "++";
                     lexeme.type = "INCREMENT";
                     lexeme.length++;
@@ -710,7 +710,7 @@ function getToken(input){
                 break;
             case "-":
                 lexeme.length++;
-                if(input.charAt(1) === "-" && mathIndicators.includes(lastTokenType) && input.charAt(2) !== "+" && input.charAt(2) !== "-"){ //3-- is decrement, but 3--3 is not
+                if(input.charAt(1) === "-" && !mathIndicators.includes(lastTokenType)){ //3-- is decrement, but 3--3 is not
                     lexeme.id = "--";
                     lexeme.type = "DECREMENT";
                     lexeme.length++;
