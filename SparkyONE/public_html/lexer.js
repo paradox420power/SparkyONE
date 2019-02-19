@@ -681,7 +681,7 @@ function getToken(input, updateLastToken){
     "(", ")", "[", "]", "{", "}", ",", ".", "\"", "\'", "\\", " ", "\n"];*/
     
     //if the last token was any of the following there might be a special case
-    var operators = ["PLUS", "ADD_ASSIGN", "SUB", "SUB_ASSIGN", "MULT", "MULT_ASSIGN", "EXPONENTIAL",
+    var operators = ["PLUS", "ADD_ASSIGN", "MINUS", "SUB_ASSIGN", "MULT", "MULT_ASSIGN", "EXPONENTIAL",
                     "DIV", "DIV_ASSIGN", "MOD", "MOD_ASSIGN", "GREATER_THAN", "GREATER_THAN_EQUAL",
                     "LESS_THAN", "LESS_THAN_EQUAL", "NOT_EQUAL", "COMPARE_EQUALS", "ASSIGN_EQUALS",
                     "LPAREN", "LBRACE", "LBRACKET"]; //these might be followed by a number prefaced by + or -
