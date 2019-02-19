@@ -325,12 +325,14 @@ function isNumeric(input){
     var numbers = /^[0-9]+$/;
     var incomplete = true;
     var charCheck = "";
+    var justDot = true; //make sure "." isn't misread as something like "#." or ".#"
     var charCheckIndex = 0;
     if(charCheckIndex < input.length){ //only read within input bounds
         charCheck = input.charAt(charCheckIndex);
     }
     while(incomplete){ //read until end, '.', or 'e/E'
         if(charCheck === '0'){ //acceptable are 0..0e###, 0..0.###, or 00...
+            justDot = false;
             charCheckIndex++; //go to next character
             if(charCheckIndex < input.length){
                 while(incomplete){
@@ -359,6 +361,7 @@ function isNumeric(input){
         }else if(charCheck === '.'){ //can be .####
             incomplete = false; //exit this loop & proceed to the post decimal loop
         }else if(charCheck.match(numbers)){//this check is technically 1-9 since 0 was checked above
+            justDot = false;
             charCheckIndex++; //go to next character
             if(charCheckIndex < input.length){
                 while(incomplete){
@@ -397,6 +400,7 @@ function isNumeric(input){
             while(incomplete){
                 charCheck = input.charAt(charCheckIndex);
                 if(charCheck.match(numbers)){
+                    justDot = false;
                     charCheckIndex++;
                     if(charCheckIndex >= input.length){
                         incomplete = false;
@@ -416,7 +420,7 @@ function isNumeric(input){
             isNumeric = true;
         }
     }
-    if(charCheck === 'e' || charCheck === 'E'){ //still need to validate some #s
+    if((charCheck === 'e' || charCheck === 'E') && justDot === false){ //still need to validate some #s
         incomplete = true; //there is more to be read
         charCheckIndex++;
         if(charCheckIndex < input.length){ //still in bounds after this char
@@ -442,6 +446,9 @@ function isNumeric(input){
             incomplete = false;
         }
     }
+    if(justDot)
+        isNumeric = false;
+    
     return isNumeric;
 }
 
