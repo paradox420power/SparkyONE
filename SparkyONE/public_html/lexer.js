@@ -669,7 +669,7 @@ function readString(input){
  * as lexeme.id, the token type as lexeme.type, what line it was encountered on as lexeme.line_no,
  * and the length of the input which will be should be removed from the input after return (i.e. call input.slice(length))
  */
-function getToken(input){
+function getToken(input, updateLastToken){
     var lexeme = {
         id:"default", //the exact input from the string
         type:"default", //what the token is classified as
@@ -684,7 +684,7 @@ function getToken(input){
     var operators = ["PLUS", "ADD_ASSIGN", "SUB", "SUB_ASSIGN", "MULT", "MULT_ASSIGN", "EXPONENTIAL",
                     "DIV", "DIV_ASSIGN", "MOD", "MOD_ASSIGN", "GREATER_THAN", "GREATER_THAN_EQUAL",
                     "LESS_THAN", "LESS_THAN_EQUAL", "NOT_EQUAL", "COMPARE_EQUALS", "ASSIGN_EQUALS",
-                    "LPAREN", "RPAREN", "LBRACE", "RBRACE", "LBRACKET", "RBRACKET"]; //these might be followed by a number prefaced by + or -
+                    "LPAREN", "LBRACE", "LBRACKET"]; //these might be followed by a number prefaced by + or -
     var mathIndicators = ["NUMBER", "FLOAT", "BINARY", "OCTAL", "HEX"]; //a + or - prefaced by this should be careful
     var numbers = /^[0-9]+$/;
     if(input !== null || input !== ""){
@@ -959,7 +959,10 @@ function getToken(input){
         lexeme.type = "END_OF_FILE";
     }
     
-    lastTokenType = lexeme.type; //store this for next token differentiation
+    if(lexeme.type !== "SPACE" && updateLastToken === true){ //don't update last expect token on space or a peek
+        //document.write("Updated last token to " + lexeme.type + "<br>");
+        lastTokenType = lexeme.type; //store this for next token differentiation
+    }
     return lexeme;
 }
 
