@@ -7,14 +7,34 @@
 
 
 function main(){
-    var input = "for   ()";
-    var lexeme = getToken(input);
-    document.write(input + "<br><br>");
+   //var input = prompt("INPUT:")
     
-    while(input.length > 0){
-        lexeme = getToken(input);
-        input = input.slice(lexeme.length);
-        document.write("ID: " + lexeme.id + ", Type: " + lexeme.type + ", Length: " + lexeme.length + ", Line: " + lexeme.line_no + "<br><br>");
+    var input =
+"a = 3 - -4\n\
+b = a+4";
+    var lexeme; //used in lexer debugging
+    
+    document.write("Input Code: " + input + "<br><br>");
+    
+    //below is code for testing lexer token identification
+    document.write("<b>Lexer:</b><br>");
+    var tmpInput = input;
+    while(tmpInput.length > 0){
+        lexeme = getToken(tmpInput);
+        tmpInput = tmpInput.slice(lexeme.length);
+        if(lexeme.type !== "SPACE")
+            document.write("ID: " + lexeme.id + ", Type: " + lexeme.type + ", Length: " + lexeme.length + ", Line: " + lexeme.line_no + "<br>");
     }
-    document.write("END_OF_FILE");
+    
+    document.write("<br><b>Parser:</b><br>");
+    parse_begin_program(input); //ensure code is syntactically legal first
+    document.write("<br><b>Runtime:</b><br>");
+    var instrList = new Array();
+    instrList = create_instructions(input);
+    for(var x = 0; x < instrList.length; x++){
+        document.write((x+1) + ") Operation " + instrList[x].instr + " resolves to " + instrList[x].result + "<br>");
+    }
+    
+    
+    document.write("<br>End of Program");
 }
