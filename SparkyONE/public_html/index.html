@@ -1,27 +1,53 @@
 <!DOCTYPE html>
-<!--
-To change this license header, choose License Headers in Project Properties.
-To change this template file, choose Tools | Templates
-and open the template in the editor.
--->
 <html>
-    <head>
-        <title>TODO supply a title</title>
-        <meta charset="UTF-8">
+<head>
+<title>SparkyONE</title>
+<meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         
-        <script src="lexer.js" type="text/javascript"></script>
-        <script src="parser.js" type="text/javascript"></script>
-        <script src="testFile.js" type="text/javascript"></script>
-        
-        
-    </head>
-    <body>
-        <div>TODO write all the code</div>
-                
-        <script type="text/javascript">
-            main();
-         </script>
-        
-    </body>
+
+
+<style>
+body {
+    background-color: lightblue;
+}
+
+h1 {
+    color: white;
+    text-align: center;
+}
+
+p {
+    font-family: verdana;
+    font-size: 20px;
+}
+</style>
+
+</head>
+
+<body>
+
+<center><h1>SparkyOne</h1>
+<p>Python online editor</p>
+
+<HR style="FILTER: alpha(opacity=100,finishopacity=0,style=3)" width="80%" color=#987cb9 SIZE=2>
+
+
+<textarea name = "code" cols="70" rows="40" placeholder="Enter your code here..." id="inputField">
+</textarea>
+
+
+<button type="button" onclick="INPUTINTERFACE(document.getElementById('inputField').value)">Run
+</button>
+
+<textarea name = "code" cols="70" rows="40" placeholder="output area." id="outputField">
+</textarea>
+
+
+
+<script src =  "lexer.js"></script>
+<script src = "parser.js"></script>
+
+<script document.getElementById('outputField').value = OUTPUTINTERFACE></script>
+</body>
 </html>
