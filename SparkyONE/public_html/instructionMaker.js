@@ -98,8 +98,9 @@ function priorityPop(queue){
     return index;
 }
 
-function resolveQueue(index, queue, result){ 
-    queue[index - 1].token.id = result; //update value
+function resolveQueue(index, queue, resolution){ 
+    queue[index - 1].token.id = resolution.result; //update value
+    queue[index - 1].token.type = resolution.type;
     queue.splice(index, 2); //remove the index & next index
 }
 
@@ -137,18 +138,9 @@ function create_instructions(input){
     return instrList;
 }
 
-var instrQueue = new Array(); //honestly, fuck the fact array.push() adds a pointer so pdates to that data type are retroactive the array
-function appendPQueue(token, pToken){ //because lexeme is dynamically updated in a list
-    var rawInstr = {
-        token: token,
-        priority: pToken
-    };
-    instrQueue.push(rawInstr);
-}
-
-
 function order_assign_statement(passedTokens){
     var priorityMod = 0; //used to scope priority of () operations
+    var instrQueue = new Array();
     var tempToken;
     var tempPriority;
     var dontQueue = false;
@@ -163,8 +155,14 @@ function order_assign_statement(passedTokens){
                 case "MULT":
                 case "DIV": tempPriority = 2 + priorityMod;
                     break;
+                case "MOD":
                 case "EXPONENTIAL": tempPriority = 3 + priorityMod;
                     break;
+                case "ADD_ASSIGN":
+                case "SUB_ASSIGN":
+                case "MULT_ASSIGN":
+                case "DIV_ASSIGN":
+                case "MOD_ASSIGN":
                 case "ASSIGN_EQUALS": tempPriority = 0;
                     break;
                 case "LPAREN": priorityMod += 10;
@@ -182,8 +180,12 @@ function order_assign_statement(passedTokens){
                     break;
 
             }
+            let rawInstr = { //let has scope only within if statement
+                token: tempToken,
+                priority: tempPriority
+            };
             if(!dontQueue){
-                appendPQueue(tempToken, tempPriority);
+                instrQueue.push(rawInstr);
             }
         }
     }
@@ -193,33 +195,42 @@ function order_assign_statement(passedTokens){
     var lineN;
     var nextL = 0;
     
-    /*for(var x = 0; x < instrQueue.length; x++){
+    for(var x = 0; x < instrQueue.length; x++){
         document.write(instrQueue[x].token.id + "    ");
     }
     document.write("<br>");
-    for(var x = 0; x < instrQueue.length; x++){
+    /*for(var x = 0; x < instrQueue.length; x++){
         document.write(instrQueue[x].priority.toString() + "    ");
-    }*/
+    }
+    document.write("<br>");*/
     
     var opIndex = 1;
     var currentOp;
     var val1;
     var val2;
     var resolution;
-    var mathOps = ["PLUS", "MINUS", "MULT", "DIV"];
+    var mathOps = ["PLUS", "MINUS", "MULT", "DIV", "MOD"];
     while(instrQueue.length > 1){
+        // get the 3 tokens operated on
         opIndex = priorityPop(instrQueue);
         val1 = instrQueue[opIndex-1].token;
         currentOp = instrQueue[opIndex].token;
         val2 = instrQueue[opIndex+1].token;
-        instr = val1.id + " " + currentOp.id + " " + val2.id;
+        //resolve any preceding negatives on these values
+        if(val1.id.charAt(0) === "+" || val1.id.charAt(0) === "-"){
+            let newVal = resolvePrecedingOperators(val1); //pass token, return string to update the value
+            val1.id = newVal;
+        }
+        if(val2.id.charAt(0) === "+" || val2.id.charAt(0) === "-"){
+            let newVal = resolvePrecedingOperators(val2); //pass token, return string to update the value
+            val2.id = newVal;
+        }
+        //perform the operation
         if(mathOps.includes(currentOp.type)){
             resolution = resolveMath(val1, currentOp, val2);
         }else{
             resolution = resolveAssign(val1, currentOp, val2);
         }
-        lineN = currentOp.line_no;
-        pushInstr(instr, resolution, cmdCount, lineN, nextL);
         resolveQueue(opIndex, instrQueue, resolution); //remove these 3 tokens & replace with ID for the resolution
     }
     instrQueue = [];
@@ -227,31 +238,134 @@ function order_assign_statement(passedTokens){
     //pushInstr(inst, result, cmd, lineN, nextL)
 }
 
+function resolvePrecedingOperators(resolveToken){ //step by step resolution of "++--+#"
+    var resolved;
+    var instr = "";
+    var result = "";
+    var isNeg = false;
+    var numbers = /^[0-9]+$/;
+    var notResolved = true;
+    while(notResolved){
+        if(resolveToken.id.charAt(0) === "+"){
+            if(resolveToken.id.charAt(1).match(numbers) || resolveToken.id.charAt(1) === "."){ //+# becomes #
+                notResolved = false;
+                instr = resolveToken.id;
+                result = resolveToken.id.slice(1); //slice off the '+'
+                if(isNeg) //indicate the whole number & its result are negative
+                    pushInstr("-(" + instr + ")", "-(" + result + ")", cmdCount, resolveToken.line_no, 0);
+                else
+                    pushInstr(instr, result, cmdCount, resolveToken.line_no, 0);
+                resolved = result;
+            }else{ //more +/-
+                instr = resolveToken.id;
+                result = resolveToken.id.slice(1); //slice off the '+'
+                if(isNeg)
+                    pushInstr("-(" + instr + ")", "-(" + result + ")", cmdCount, resolveToken.line_no, 0);
+                else
+                    pushInstr(instr, result, cmdCount, resolveToken.line_no, 0);
+                resolveToken.id = result;
+            }
+        }else if(resolveToken.id.charAt(0) === '-'){
+            if(resolveToken.id.charAt(1).match(numbers) || resolveToken.id.charAt(1) === "."){
+                notResolved = false;
+                if(isNeg)
+                    instr = "-(" + resolveToken.id + ")";
+                else
+                    instr = resolveToken.id;
+                result = resolveToken.id.slice(1); //slice off the '-'
+                isNeg = !isNeg;
+                if(!isNeg) //only push an instruction of --# to #
+                    pushInstr(instr, result, cmdCount, resolveToken.line_no, 0);
+                //we do slice off the - even if it is the last -, but there is not need to say -# resolves to -(#)
+                resolved = result;
+            }else{ //more +/-
+                if(isNeg)
+                    instr = "-(" + resolveToken.id + ")";
+                else
+                    instr = resolveToken.id;
+                result = resolveToken.id.slice(1); //slice off the '-'
+                isNeg = !isNeg;
+                if(isNeg)
+                    pushInstr(instr, "-(" + result + ")", cmdCount, resolveToken.line_no, 0);
+                else
+                    pushInstr(instr, result, cmdCount, resolveToken.line_no, 0);
+                resolveToken.id = result;
+            }
+        }
+    }
+    if(isNeg)
+        resolved = "-" + resolved; //add the - outisde parantheses to tthe official return
+    return resolved;
+}
+
+function convertTokenToValue(token){
+    var value;
+    var instr, result;
+    instr = token.id;
+    var index;
+    var isNeg = false;
+    if(token.id.charAt(0) === "-"){
+        isNeg =true;
+        token.id = token.id.slice(1);
+    }
+    if(token.type === "ID"){
+        instr = "\"" + instr + "\"";
+        index = varIsDeclared(token.id);
+        if(index !== -1){//not a new variable
+            value = Number.parseInt(getVarValue(index), 10);//assumes to be an int at this point
+        }else{//new variable, but it can't be declared here
+            
+        }
+    }else{
+        switch(token.type){
+            case "FLOAT":
+                if(isNeg)
+                    token.id = "-" + token.id;
+                value = Number.parseFloat(token.id);
+                break;
+            case "NUMBER":
+                if(isNeg)
+                    token.id = "-" + token.id;
+                value = Number.parseInt(token.id, 10);
+                break;
+            case "BINARY":
+                token.id = token.id.slice(2); //slice off 0b for conversion
+                if(isNeg)
+                    token.id = "-" + token.id;
+                value = Number.parseInt(token.id, 2);
+                break;
+            case "OCTAL":
+                token.id = token.id.slice(2); //slice off 0o for conversion
+                if(isNeg)
+                    token.id = "-" + token.id;
+                value = Number.parseInt(token.id, 8);
+                break;
+            case "HEX":
+                token.id = token.id.slice(2); //slice off 0x for conversion
+                if(isNeg)
+                    token.id = "-" + token.id;
+                value = Number.parseInt(token.id, 16);
+                break;
+            case "STRING":
+                if(isNeg)
+                    token.id = "-" + token.id;
+                value = token.id;
+                break;
+        }
+    }
+    result = value;
+    if(token.type !== "NUMBER" && token.type !== "FLOAT"){ //nothing to really show on that conversion
+        pushInstr(instr, result, cmdCount, token.line_no, 0);
+    }
+    return value;
+}
 
 function resolveMath(val1, op, val2){
-    var resolved;
+    var instr, resolved, lineN;
+    lineN = op.line_no;
     var num1, num2;
-    var index;
-    if(val1.type === "ID"){
-        index = varIsDeclared(val1.id);
-        if(index !== -1){//not a new variable
-            num1 = Number.parseInt(getVarValue(index), 10);//assumes to be an int at this point
-        }else{//new variable, but it can't be declared here
-            
-        }
-    }else{
-        num1 = Number.parseInt(val1.id, 10);
-    }
-    if(val2.type === "ID"){
-        index = varIsDeclared(val2.id);
-        if(index !== -1){//not a new variable
-            num2 = Number.parseInt(getVarValue(index), 10);
-        }else{//new variable, but it can't be declared here
-            
-        }
-    }else{
-        num2 = Number.parseInt(val2.id, 10);
-    }
+    num1 = convertTokenToValue(val1);
+    num2 = convertTokenToValue(val2);
     switch(op.type){
         case "PLUS":
             resolved = num1 + num2;
@@ -265,30 +379,85 @@ function resolveMath(val1, op, val2){
         case "DIV":
             resolved = num1 / num2;
             break;
-        
+        case "MOD":
+            resolved = num1 % num2;
+            break;
     }
-    return resolved + "";
+    instr = num1 + " " + op.id + " " + num2;
+    pushInstr(instr, resolved, cmdCount, lineN, 0);
+    var resultType = "NUMBER"; //determined later
+    var resolution = {
+        result: resolved + "",
+        type: resultType
+    };
+    return resolution;
 }
 
 function resolveAssign(val1, op, val2){
-    var resolved;
-    var index;
+    var instr, resolved, lineN, intermediateRes;
+    var index, newVal;
+    let tmpOp = op;
     switch(op.type){
         case "ASSIGN_EQUALS":
+            instr = val1.id + " " + op.id + " " + val2.id;
+            newVal = val2.id;
             resolved = val2.id + " assigned to " + val1.id;
             break;
-        case "ADD_EQUALS":
-            
+        case "ADD_ASSIGN":
+            tmpOp.id = "+";
+            tmpOp.type = "PLUS";
+            intermediateRes = resolveMath(val1, tmpOp, val2);
+            newVal = intermediateRes.result;
+            instr = val1.id + " = " + newVal;
+            resolved = intermediateRes.result + " assigned to " + val1.id;
+            break;
+        case "SUB_ASSIGN":
+            tmpOp.id = "-";
+            tmpOp.type = "MINUS";
+            intermediateRes = resolveMath(val1, tmpOp, val2);
+            newVal = intermediateRes.result;
+            instr = val1.id + " = " + newVal;
+            resolved = intermediateRes.result + " assigned to " + val1.id;
+            break;
+        case "MULT_ASSIGN":
+            tmpOp.id = "*";
+            tmpOp.type = "MULT";
+            intermediateRes = resolveMath(val1, tmpOp, val2);
+            newVal = intermediateRes.result;
+            instr = val1.id + " = " + newVal;
+            resolved = intermediateRes.result + " assigned to " + val1.id;
+            break;
+        case "DIV_ASSIGN":
+            tmpOp.id = "/";
+            tmpOp.type = "DIV";
+            intermediateRes = resolveMath(val1, tmpOp, val2);
+            newVal = intermediateRes.result;
+            instr = val1.id + " = " + newVal;
+            resolved = intermediateRes.result + " assigned to " + val1.id;
+            break;
+        case "MOD_ASSIGN":
+            tmpOp.id = "%";
+            tmpOp.type = "MOD";
+            intermediateRes = resolveMath(val1, tmpOp, val2);
+            newVal = intermediateRes.result;
+            instr = val1.id + " = " + newVal;
+            resolved = intermediateRes.result + " assigned to " + val1.id;
             break;
     }
     if(val1.type === "ID"){
         index = varIsDeclared(val1.id);
         if(index === -1){//new variable
             //pushVar(vName, vType, vValue, vFuncScope, vIndentScope)
-            pushVar(val1.id, val2.type, val2.id, "global", 0);
+            pushVar(val1.id, val2.type, newVal, "global", 0);
         }else{ //update existing
-            updateVarValue(index, val2.id);
+            updateVarValue(index, newVal);
         }
     }//else this is an invalid assignment statement
-    return resolved + "";
+    pushInstr(instr, resolved, cmdCount, lineN, 0);
+    var resultType = "ID"; //assign should always go to ID
+    var resolution = {
+        result: resolved + "",
+        type: resultType
+    };
+    return resolution;
 }
