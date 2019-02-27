@@ -10,8 +10,8 @@ function main(){
    //var input = prompt("INPUT:")
     
     var input =
-"a = 3 - -4\n\
-b = a+4";
+"a = 3 + 2\n\
+a += 3";
     var lexeme; //used in lexer debugging
     
     document.write("Input Code: " + input + "<br><br>");
@@ -20,14 +20,14 @@ b = a+4";
     document.write("<b>Lexer:</b><br>");
     var tmpInput = input;
     while(tmpInput.length > 0){
-        lexeme = getToken(tmpInput);
+        lexeme = getToken(tmpInput, true);
         tmpInput = tmpInput.slice(lexeme.length);
         if(lexeme.type !== "SPACE")
             document.write("ID: " + lexeme.id + ", Type: " + lexeme.type + ", Length: " + lexeme.length + ", Line: " + lexeme.line_no + "<br>");
     }
     
     document.write("<br><b>Parser:</b><br>");
-    parse_begin_program(input); //ensure code is syntactically legal first
+    //parse_begin_program(input); //ensure code is syntactically legal first
     document.write("<br><b>Runtime:</b><br>");
     var instrList = new Array();
     instrList = create_instructions(input);
