@@ -2,7 +2,7 @@
 var instrList = new Array(); //global list of instructions
 var funcList = new Array(); //list of callable functions
 var varList = new Array(); //list of declared variables
-var cmdCount = 1;
+var cmdCount = 1; //this is the instruction on, (instr); or (instr)\n should increment this value
 
 //instruction list operations
 function pushInstr(inst, result, cmd, lineN, nextL){
@@ -16,7 +16,7 @@ function pushInstr(inst, result, cmd, lineN, nextL){
     instrList.push(instruction);
 }
 
-//custom function list operations
+//custom function list operations, will be updated once parser has full design
 function pushFunc(fName){
     var Cust_Func = {
         name: fName, //name of function
@@ -26,6 +26,7 @@ function pushFunc(fName){
     funcList.push(Cust_Func);
 }
 
+//declare a new custom function and push it to the list of call-able functions
 function pushFunc(fName, rType){
     var Cust_Func = {
         name: fName, //name of function
@@ -56,6 +57,7 @@ function addParamIndex(index, param){ //refences function by name & updates its 
 }
 
 //variable list operations
+//check if a vairable name exists for operations
 function varIsDeclared(vName){ //used to decide if a var should be declared or updated
     var index = -1;
     for(var x = 0; x < varList.length; x++){
@@ -65,6 +67,7 @@ function varIsDeclared(vName){ //used to decide if a var should be declared or u
     return index;
 }
 
+//on new variable create it & push it to the list of variables
 function pushVar(vName, vType, vValue, vFuncScope, vIndentScope){
     var Variable = {
         id: vName + "",
@@ -77,15 +80,18 @@ function pushVar(vName, vType, vValue, vFuncScope, vIndentScope){
     varList.push(Variable);
 }
 
+//get the string value stored at the index under vValue
 function getVarValue(index){
     return varList[index].value;
 }
 
+//push new string to the given index vValue
 function updateVarValue(index, newVal){
     varList[index].value = newVal;
 }
 
 //priority queue operations
+//finds the index of the largest priority operation & returns that index
 function priorityPop(queue){
     var index = -1;
     var priority = -1;
@@ -98,6 +104,9 @@ function priorityPop(queue){
     return index;
 }
 
+//takes an index (typically the one from priority pop), a queue, and a token resolution
+//it will go to the token left of the passed index & update the various fields of that token to match the passed one
+//and then it removes the index & index+1 token. Efefctively replacing the operated tokens with their resolution
 function resolveQueue(index, queue, resolution){ 
     queue[index - 1].token.id = resolution.result; //update value
     queue[index - 1].token.type = resolution.type;
@@ -110,22 +119,35 @@ function appendTokenList(item){ //because lexeme is dynamically updated in a lis
     lineTokens.push(temp);
 }
 
+//unrefined starting class that directs instruction to their according method for complete resolution, currently only directs to assign statements
 function create_instructions(input){
     //proof of concept
     var lineEnds = ["SEMICOLON", "END_OF_LINE", "END_OF_FILE"];
     var lexeme;
     while(input.length > 0){
         lineTokens = []; //reset array 
+        let instr_line = " ";
         lexeme = getToken(input, true);
+        instr_line += lexeme.id + " ";
         appendTokenList(lexeme);
         input = input.slice(lexeme.length);
-        switch(lexeme.type){
+        switch(lexeme.type){ //switch to find out which method to jump to, based off CFG
+            case "BINARY": //all of these should cascade to math operation or comparison
+            case "OCTAL":
+            case "HEX":
+            case "NUMBER":
+            case "FLOAT":
+            case "STRING":
             case "ID": //some assign statement or function call
                 while(!lineEnds.includes(lexeme.type)){
                     lexeme = getToken(input, true);
-                    appendTokenList(lexeme);
+                    if(!lineEnds.includes(lexeme.type)){ //don't push a line end token to the list getting resolved, but it will be sliced
+                        instr_line += lexeme.id + " ";
+                        appendTokenList(lexeme);
+                    }
                     input = input.slice(lexeme.length);
                 }
+                pushInstr("Instruction" + instr_line, "", cmdCount, lexeme.line_no, 0); //this pushes the line being resolved before actualy step wise resolution
                 order_assign_statement(lineTokens);
                 lineTokens = [];
                 break;
@@ -138,6 +160,12 @@ function create_instructions(input){
     return instrList;
 }
 
+/*
+ This will convert the passed tokens into a priority queue of atomic operations. It will then iterate
+through the operations and resolve them 1 at a time, pushing them to the instruction queue that gets returned
+until there is only 1 token left to resolve. This method does not push the instructions, but calls methods that
+push the appropriate syntax for operations. While it's called assign it can also handle standalone ops, like 3+3 or 4 == 5
+ */
 function order_assign_statement(passedTokens){
     var priorityMod = 0; //used to scope priority of () operations
     var instrQueue = new Array();
@@ -149,29 +177,37 @@ function order_assign_statement(passedTokens){
             tempToken = passedTokens[x];
             dontQueue = false;
             switch(passedTokens[x].type){//used to assign priority
+                case "COMPARE_EQUALS": //operations can have comparators, for some reason
+                case "LESS_THAN_EQUAL":
+                case "LESS_THAN":
+                case "GREATER_THAN_EQUAL":
+                case "GREATER_THAN":
+                case "NOT_EQUAL": tempPriority = 1 + priorityMod; //compares are that last things executed in this kind of operation
+                    break;
                 case "PLUS":
-                case "MINUS": tempPriority = 1 + priorityMod;
+                case "MINUS": tempPriority = 2 + priorityMod;
                     break;
                 case "MULT":
-                case "DIV": tempPriority = 2 + priorityMod;
+                case "DIV": tempPriority = 3 + priorityMod;
                     break;
                 case "MOD":
-                case "EXPONENTIAL": tempPriority = 3 + priorityMod;
+                case "EXPONENTIAL": tempPriority = 4 + priorityMod;
                     break;
                 case "ADD_ASSIGN":
                 case "SUB_ASSIGN":
                 case "MULT_ASSIGN":
                 case "DIV_ASSIGN":
                 case "MOD_ASSIGN":
-                case "ASSIGN_EQUALS": tempPriority = 0;
+                case "ASSIGN_EQUALS": tempPriority = 0 + priorityMod;
+                    priorityMod++; //assigns need to be read right to left, so we increment priority mod for each type assign
                     break;
-                case "LPAREN": priorityMod += 10;
+                case "LPAREN": priorityMod += 10; //all parenthised operations need to be executed before a higher priority external instr.
                     dontQueue = true;
                     break;
                 case "RPAREN": priorityMod -= 10;
                     dontQueue = true;
                     break;
-                case "SEMICOLON":
+                case "SEMICOLON": //these shouldn't be passed at all, but we want to really avoid treating them as instr. by this point
                 case "END_OF_LINE":
                 case "END_OF_FILE": dontQueue = true;
                     break;
@@ -185,31 +221,27 @@ function order_assign_statement(passedTokens){
                 priority: tempPriority
             };
             if(!dontQueue){
-                instrQueue.push(rawInstr);
+                instrQueue.push(rawInstr);//add the instr to the queue of operations getting resolved
             }
         }
     }
     
-    var instr = "";
-    var result = "";
-    var lineN;
-    var nextL = 0;
-    
     for(var x = 0; x < instrQueue.length; x++){
-        document.write(instrQueue[x].token.id + "    ");
+        document.write(instrQueue[x].token.id + " ");
     }
     document.write("<br>");
-    /*for(var x = 0; x < instrQueue.length; x++){
-        document.write(instrQueue[x].priority.toString() + "    ");
+    for(var x = 0; x < instrQueue.length; x++){
+        document.write(instrQueue[x].priority.toString() + " ");
     }
-    document.write("<br>");*/
+    document.write("<br>");
     
     var opIndex = 1;
     var currentOp;
     var val1;
     var val2;
     var resolution;
-    var mathOps = ["PLUS", "MINUS", "MULT", "DIV", "MOD"];
+    var mathOps = ["PLUS", "MINUS", "MULT", "DIV", "MOD"]; //list of operations that can be resolved in an assign statement before assigning
+    var compareOps = ["COMPARE_EQUALS", "LESS_THAN", "LESS_THAN_EQUAL", "GREAT_THAN", "GREATER_THAN_EQUAL", "NOT_EQUAL"];
     while(instrQueue.length > 1){
         // get the 3 tokens operated on
         opIndex = priorityPop(instrQueue);
@@ -226,46 +258,48 @@ function order_assign_statement(passedTokens){
             val2.id = newVal;
         }
         //perform the operation
-        if(mathOps.includes(currentOp.type)){
+        if(mathOps.includes(currentOp.type)){ //if the next prioritized operation is math, go to resolve Math
             resolution = resolveMath(val1, currentOp, val2);
-        }else{
+        }else if(compareOps.includes(currentOp.type)){ //check if it is a comparator
+            resolution = resolveCompare(val1, currentOp, val2);
+        }else{ //else it assumed to be an assignment statement
             resolution = resolveAssign(val1, currentOp, val2);
         }
         resolveQueue(opIndex, instrQueue, resolution); //remove these 3 tokens & replace with ID for the resolution
     }
-    instrQueue = [];
-    
-    //pushInstr(inst, result, cmd, lineN, nextL)
+    instrQueue = []; //for added measure, there should only be 1 token in the queue but it never hurts to empty it at conclusion
 }
 
 function resolvePrecedingOperators(resolveToken){ //step by step resolution of "++--+#"
     var resolved;
     var instr = "";
     var result = "";
-    var isNeg = false;
+    var isNeg = false; // used to encompass a value as -(#) or as #, since -(-#) becomes # but -(#) is just -#
     var numbers = /^[0-9]+$/;
-    var notResolved = true;
+    var notResolved = true; //check to keep goingi until reaching the start of a number
     while(notResolved){
+        //read "+"
         if(resolveToken.id.charAt(0) === "+"){
             if(resolveToken.id.charAt(1).match(numbers) || resolveToken.id.charAt(1) === "."){ //+# becomes #
                 notResolved = false;
                 instr = resolveToken.id;
                 result = resolveToken.id.slice(1); //slice off the '+'
                 if(isNeg) //indicate the whole number & its result are negative
-                    pushInstr("-(" + instr + ")", "-(" + result + ")", cmdCount, resolveToken.line_no, 0);
+                    pushInstr("Value -(" + instr + ")", " is resolved to -(" + result + ")", cmdCount, resolveToken.line_no, 0);
                 else
-                    pushInstr(instr, result, cmdCount, resolveToken.line_no, 0);
+                    pushInstr("Value " + instr, " is resolved to " + result, cmdCount, resolveToken.line_no, 0);
                 resolved = result;
             }else{ //more +/-
                 instr = resolveToken.id;
                 result = resolveToken.id.slice(1); //slice off the '+'
                 if(isNeg)
-                    pushInstr("-(" + instr + ")", "-(" + result + ")", cmdCount, resolveToken.line_no, 0);
+                    pushInstr("Value -(" + instr + ")", " is resolved to -(" + result + ")", cmdCount, resolveToken.line_no, 0);
                 else
-                    pushInstr(instr, result, cmdCount, resolveToken.line_no, 0);
+                    pushInstr("Value " + instr, " is resolved to " + result, cmdCount, resolveToken.line_no, 0);
                 resolveToken.id = result;
             }
-        }else if(resolveToken.id.charAt(0) === '-'){
+        //read "-"
+        }else if(resolveToken.id.charAt(0) === '-'){//next is a negative & isNeg will be flipped
             if(resolveToken.id.charAt(1).match(numbers) || resolveToken.id.charAt(1) === "."){
                 notResolved = false;
                 if(isNeg)
@@ -275,7 +309,7 @@ function resolvePrecedingOperators(resolveToken){ //step by step resolution of "
                 result = resolveToken.id.slice(1); //slice off the '-'
                 isNeg = !isNeg;
                 if(!isNeg) //only push an instruction of --# to #
-                    pushInstr(instr, result, cmdCount, resolveToken.line_no, 0);
+                    pushInstr("Value " + instr, " is resolved to " + result, cmdCount, resolveToken.line_no, 0);
                 //we do slice off the - even if it is the last -, but there is not need to say -# resolves to -(#)
                 resolved = result;
             }else{ //more +/-
@@ -286,18 +320,20 @@ function resolvePrecedingOperators(resolveToken){ //step by step resolution of "
                 result = resolveToken.id.slice(1); //slice off the '-'
                 isNeg = !isNeg;
                 if(isNeg)
-                    pushInstr(instr, "-(" + result + ")", cmdCount, resolveToken.line_no, 0);
+                    pushInstr("Value " + instr, " is resolved to -(" + result + ")", cmdCount, resolveToken.line_no, 0);
                 else
-                    pushInstr(instr, result, cmdCount, resolveToken.line_no, 0);
+                    pushInstr("Value " + instr, " is resolved to " + result, cmdCount, resolveToken.line_no, 0);
                 resolveToken.id = result;
             }
         }
     }
-    if(isNeg)
-        resolved = "-" + resolved; //add the - outisde parantheses to tthe official return
+    if(isNeg) //last resolution was -# resolves to -(#), but we sliced off the - and need to put it back
+        resolved = "-" + resolved; //add the - outisde parantheses to the official return
     return resolved;
 }
 
+//this will take whatever token is passed and get its vValue, be it a raw number and its number or a variable and its number
+//converts bin, oct, & hex to their numerical equivalents
 function convertTokenToValue(token){
     var value;
     var instr, result;
@@ -309,7 +345,7 @@ function convertTokenToValue(token){
         token.id = token.id.slice(1);
     }
     if(token.type === "ID"){
-        instr = "\"" + instr + "\"";
+        instr = "\"" + instr + "\""; //when pushing conversion instruction it will read "Value "var" "
         index = varIsDeclared(token.id);
         if(index !== -1){//not a new variable
             value = Number.parseInt(getVarValue(index), 10);//assumes to be an int at this point
@@ -354,8 +390,9 @@ function convertTokenToValue(token){
         }
     }
     result = value;
+    //push any conversion instruction, such as a variable to its vValue or a binary to its base 10 equivalent
     if(token.type !== "NUMBER" && token.type !== "FLOAT"){ //nothing to really show on that conversion
-        pushInstr(instr, result, cmdCount, token.line_no, 0);
+        pushInstr("Value " + instr, " is resolved to " + result, cmdCount, token.line_no, 0);
     }
     return value;
 }
@@ -384,8 +421,64 @@ function resolveMath(val1, op, val2){
             break;
     }
     instr = num1 + " " + op.id + " " + num2;
-    pushInstr(instr, resolved, cmdCount, lineN, 0);
+    //push the math operation performed
+    pushInstr("Operation " + instr, " is resolved to " + resolved, cmdCount, lineN, 0);
     var resultType = "NUMBER"; //determined later
+    var resolution = {
+        result: resolved + "",
+        type: resultType
+    };
+    return resolution;
+}
+
+function resolveCompare(val1, op, val2){
+    var instr, resolved, lineN;
+    lineN = op.line_no;
+    var num1, num2;
+    num1 = convertTokenToValue(val1);
+    num2 = convertTokenToValue(val2);
+    switch(op.type){
+        case "COMPARE_EQUALS":
+            if(num1 === num2)
+                resolved = "True";
+            else
+                resolved = "False";
+            break;
+        case "LESS_THAN":
+            if(num1 < num2)
+                resolved = "True";
+            else
+                resolved = "False";
+            break;
+        case "LESS_THAN_EQUAL":
+            if(num1 <= num2)
+                resolved = "True";
+            else
+                resolved = "False";
+            break;
+        case "GREATER_THAN":
+            if(num1 > num2)
+                resolved = "True";
+            else
+                resolved = "False";
+            break;
+        case "GREATER_THAN_EQUAL":
+            if(num1 >= num2)
+                resolved = "True";
+            else
+                resolved = "False";
+            break;
+        case "NOT_EQUAL":
+            if(num1 !== num2)
+                resolved = "True";
+            else
+                resolved = "False";
+            break;
+    }
+    instr = num1 + " " + op.id + " " + num2;
+    //push the math operation performed
+    pushInstr("Comparison " + instr, " is resolved to " + resolved, cmdCount, lineN, 0);
+    var resultType = "BOOLEAN"; //determined later
     var resolution = {
         result: resolved + "",
         type: resultType
@@ -401,15 +494,15 @@ function resolveAssign(val1, op, val2){
         case "ASSIGN_EQUALS":
             instr = val1.id + " " + op.id + " " + val2.id;
             newVal = val2.id;
-            resolved = val2.id + " assigned to " + val1.id;
+            resolved = val2.id + " assigned to variable \"" + val1.id + "\"";
             break;
         case "ADD_ASSIGN":
             tmpOp.id = "+";
             tmpOp.type = "PLUS";
-            intermediateRes = resolveMath(val1, tmpOp, val2);
-            newVal = intermediateRes.result;
-            instr = val1.id + " = " + newVal;
-            resolved = intermediateRes.result + " assigned to " + val1.id;
+            intermediateRes = resolveMath(val1, tmpOp, val2); //perform the + in += as its own atomic operation
+            newVal = intermediateRes.result; //store the result
+            instr = val1.id + " = " + newVal; //treat the result as the # being assigned
+            resolved = intermediateRes.result + " assigned to variable \"" + val1.id + "\"";
             break;
         case "SUB_ASSIGN":
             tmpOp.id = "-";
@@ -417,7 +510,7 @@ function resolveAssign(val1, op, val2){
             intermediateRes = resolveMath(val1, tmpOp, val2);
             newVal = intermediateRes.result;
             instr = val1.id + " = " + newVal;
-            resolved = intermediateRes.result + " assigned to " + val1.id;
+            resolved = intermediateRes.result + " assigned to variable " + val1.id;
             break;
         case "MULT_ASSIGN":
             tmpOp.id = "*";
@@ -425,7 +518,7 @@ function resolveAssign(val1, op, val2){
             intermediateRes = resolveMath(val1, tmpOp, val2);
             newVal = intermediateRes.result;
             instr = val1.id + " = " + newVal;
-            resolved = intermediateRes.result + " assigned to " + val1.id;
+            resolved = intermediateRes.result + " assigned to variable \"" + val1.id + "\"";
             break;
         case "DIV_ASSIGN":
             tmpOp.id = "/";
@@ -433,7 +526,7 @@ function resolveAssign(val1, op, val2){
             intermediateRes = resolveMath(val1, tmpOp, val2);
             newVal = intermediateRes.result;
             instr = val1.id + " = " + newVal;
-            resolved = intermediateRes.result + " assigned to " + val1.id;
+            resolved = intermediateRes.result + " assigned to variable \"" + val1.id + "\"";
             break;
         case "MOD_ASSIGN":
             tmpOp.id = "%";
@@ -441,10 +534,10 @@ function resolveAssign(val1, op, val2){
             intermediateRes = resolveMath(val1, tmpOp, val2);
             newVal = intermediateRes.result;
             instr = val1.id + " = " + newVal;
-            resolved = intermediateRes.result + " assigned to " + val1.id;
+            resolved = intermediateRes.result + " assigned to variable \"" + val1.id + "\"";
             break;
     }
-    if(val1.type === "ID"){
+    if(val1.type === "ID"){ //update the variable that had a nmuber assigned to it
         index = varIsDeclared(val1.id);
         if(index === -1){//new variable
             //pushVar(vName, vType, vValue, vFuncScope, vIndentScope)
@@ -453,10 +546,10 @@ function resolveAssign(val1, op, val2){
             updateVarValue(index, newVal);
         }
     }//else this is an invalid assignment statement
-    pushInstr(instr, resolved, cmdCount, lineN, 0);
-    var resultType = "ID"; //assign should always go to ID
+    pushInstr("Assignment " + instr, " resolved to value " + resolved, cmdCount, lineN, 0);
+    var resultType = "ID"; //assign should always go to ID, 4 = 5
     var resolution = {
-        result: resolved + "",
+        result: newVal + "",
         type: resultType
     };
     return resolution;

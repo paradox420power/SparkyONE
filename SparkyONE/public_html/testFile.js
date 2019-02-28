@@ -10,9 +10,8 @@ function main(){
    //var input = prompt("INPUT:")
     
     var input =
-"a = 3 + 2\n\
-a += 3";
-    var lexeme; //used in lexer debugging
+"a = b = 4 + 3 + 5";
+    let lexeme; //used in lexer debugging
     
     document.write("Input Code: " + input + "<br><br>");
     
@@ -32,7 +31,7 @@ a += 3";
     var instrList = new Array();
     instrList = create_instructions(input);
     for(var x = 0; x < instrList.length; x++){
-        document.write((x+1) + ") Operation " + instrList[x].instr + " resolves to " + instrList[x].result + "<br>");
+        document.write((x+1) + ") " + instrList[x].instr + " " + instrList[x].result + "<br>");
     }
     
     
