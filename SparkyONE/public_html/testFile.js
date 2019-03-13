@@ -7,25 +7,39 @@
 
 
 function main(){
-    var input =
-"\
-\n\
-\n\
-\n\
-if    a ==  a:\n\
-FAKE_ASSIGN_STATEMENT\n\
-else true:\n\
-";
-    var lexeme;
+
+
     
-    document.write(input + "<br><br>");
+    var input =document.getElementById("inputField").value
+    var output
+    /*
+"a = 3 + 2\n\
+a += 3";*/
+    var lexeme; //used in lexer debugging
     
-    parse_begin_program(input);
+    output = "Input Code: " + input + "\n";
     
-    /*while(input.length > 0){
-        lexeme = getToken(input);
-        input = input.slice(lexeme.length);
-        document.write("ID: " + lexeme.id + ", Type: " + lexeme.type + ", Length: " + lexeme.length + ", Line: " + lexeme.line_no + "<br><br>");
-    }*/
-    document.write("END_OF_FILE");
+ 
+    output += "Lexer:  \n";
+
+    var tmpInput = input;
+    while(tmpInput.length > 0){
+        lexeme = getToken(tmpInput, true);
+        tmpInput = tmpInput.slice(lexeme.length);
+        if(lexeme.type !== "SPACE")
+           output += ("ID: " + lexeme.id + ", Type: " + lexeme.type + ", Length: " + lexeme.length + ", Line: " + lexeme.line_no + "\n" );
+    }
+    
+    output += "Parser:  \n" ;
+
+    output += "Runtime:  \n";
+
+    document.getElementById("outputField").value = output
+
+    var instrList = new Array();
+    instrList = create_instructions(input);
+    for(var x = 0; x < instrList.length; x++){
+        output += ((x+1) + ") Operation " + instrList[x].instr + " resolves to " + instrList[x].result + "\n");
+    }
+    
 }
