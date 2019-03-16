@@ -106,7 +106,9 @@ function readBin(input){
         id:"", //the exact input from the string
         type:"BINARY", //what the token is classified as
         line_no: code_line, //what line of code the token is on
-        length: 0 //used to remove the lexeme including preceding spaces from input string upon return
+        length: 0, //used to remove the lexeme including preceding spaces from input string upon return
+        charStart: 0,
+        charEnd: 0
     };
     
     var bin = /^[0-1]+$/;
@@ -193,7 +195,9 @@ function readOct(input){
         id:"", //the exact input from the string
         type:"OCTAL", //what the token is classified as
         line_no: code_line, //what line of code the token is on
-        length: 0 //used to remove the lexeme including preceding spaces from input string upon return
+        length: 0, //used to remove the lexeme including preceding spaces from input string upon return
+        charStart: 0,
+        charEnd: 0
     };
     
     var bin = /^[0-8]+$/;
@@ -282,7 +286,9 @@ function readHex(input){
         id:"", //the exact input from the string
         type:"HEX", //what the token is classified as
         line_no: code_line, //what line of code the token is on
-        length: 0 //used to remove the lexeme including preceding spaces from input string upon return
+        length: 0, //used to remove the lexeme including preceding spaces from input string upon return
+        charStart: 0,
+        charEnd: 0
     };
     
     var hexNums = /^[0-9]+$/;
@@ -457,7 +463,9 @@ function readNumber(input){
         id:"", //the exact input from the string
         type:"NUMBER", //what the token is classified as
         line_no: code_line, //what line of code the token is on
-        length: 0 //used to remove the lexeme including preceding spaces from input string upon return
+        length: 0, //used to remove the lexeme including preceding spaces from input string upon return
+        charStart: 0,
+        charEnd: 0
     };
     
     var numbers = /^[0-9]+$/;
@@ -591,7 +599,9 @@ function readWord(input){
         id:"", //the exact input from the string
         type:"ID", //what the token is classified as
         line_no: code_line, //what line of code the token is on
-        length: 0 //used to remove the lexeme including preceding spaces from input string upon return
+        length: 0, //used to remove the lexeme including preceding spaces from input string upon return
+        charStart: 0,
+        charEnd: 0
     };
     
     var charCheck = "";
@@ -676,12 +686,15 @@ function readString(input){
  * as lexeme.id, the token type as lexeme.type, what line it was encountered on as lexeme.line_no,
  * and the length of the input which will be should be removed from the input after return (i.e. call input.slice(length))
  */
+var currentLineCharIndex = 0; //used for highlighting purposes during visualization
 function getToken(input, updateLastToken){
-    var lexeme = {
+    let lexeme = {
         id:"default", //the exact input from the string
         type:"default", //what the token is classified as
         line_no: code_line, //what line of code the token is on
-        length: 0 //used to remove the lexeme including preceding spaces from input string upon return
+        length: 0, //used to remove the lexeme including preceding spaces from input string upon return
+        charStart: 0,
+        charEnd: 0
     };
     
     /*["=", "+", "-", "*", "/", "%", "^", "<", ">", ":", ";",
@@ -907,6 +920,9 @@ function getToken(input, updateLastToken){
                 lexeme.id = "line_break";
                 lexeme.type = "END_OF_LINE";
                 lexeme.length++;
+                lexeme.charStart = lexeme.charEnd = currentLineCharIndex;
+                code_line++;
+                currentLineCharIndex = 0;
                 break;
             case "#":
                 lexeme.id = "#";
@@ -970,6 +986,14 @@ function getToken(input, updateLastToken){
         //document.write("Updated last token to " + lexeme.type + "<br>");
         lastTokenType = lexeme.type; //store this for next token differentiation
     }
+    
+    //capture what characters are part of this lexeme for highlighting pruposes
+    if(lexeme.type !== "END_OF_LINE"){
+        lexeme.charStart = currentLineCharIndex;
+        lexeme.charEnd = lexeme.charStart + lexeme.length-1;
+        currentLineCharIndex += lexeme.length;
+    }
+    
     return lexeme;
 }
 

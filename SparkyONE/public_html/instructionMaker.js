@@ -151,6 +151,27 @@ function create_instructions(input){
                 order_assign_statement(lineTokens);
                 lineTokens = [];
                 break;
+            case "WHILE":
+                while(lexeme.type !== "COLON"){
+                    lexeme = getToken(input, true);
+                    if(lexeme.type !== "COLON"){
+                        instr_line += lexeme.id + " ";
+                        appendTokenList(lexeme);
+                    }
+                    input = input.slice(lexeme.length);
+                }
+                instr_line += lexeme.id + " "; //we want to see : on the instruction, but not he following line break
+                appendTokenList(lexeme);
+                input = input.slice(lexeme.length);
+                lexeme = getToken(input, true); //next should be a linebreak that we don't want on the input
+                input = input.slice(lexeme.length);
+                
+                pushInstr("Instruction" + instr_line, "", cmdCount, lexeme.line_no, 0); //this pushes the line being resolved before actualy step wise resolution
+                order_while_loop(lineTokens);
+                lineTokens = [];
+                break;
+            case "IF":
+                break;
             default: document.write("Error ");
                 input = input.slice(1);
                 break;
@@ -182,7 +203,7 @@ function order_assign_statement(passedTokens){
                 case "LESS_THAN":
                 case "GREATER_THAN_EQUAL":
                 case "GREATER_THAN":
-                case "NOT_EQUAL": tempPriority = 1 + priorityMod; //compares are that last things executed in this kind of operation
+                case "NOT_EQUAL": tempPriority = 1 + priorityMod; //compares are that last things executed
                     break;
                 case "PLUS":
                 case "MINUS": tempPriority = 2 + priorityMod;
@@ -242,7 +263,7 @@ function order_assign_statement(passedTokens){
     var resolution;
     var mathOps = ["PLUS", "MINUS", "MULT", "DIV", "MOD"]; //list of operations that can be resolved in an assign statement before assigning
     var compareOps = ["COMPARE_EQUALS", "LESS_THAN", "LESS_THAN_EQUAL", "GREAT_THAN", "GREATER_THAN_EQUAL", "NOT_EQUAL"];
-    while(instrQueue.length > 1){
+    while(instrQueue.length > 1){ //assignments should resolve down to a single vlaue remaining (and it is what was assigned to a variable)
         // get the 3 tokens operated on
         opIndex = priorityPop(instrQueue);
         val1 = instrQueue[opIndex-1].token;
@@ -268,6 +289,110 @@ function order_assign_statement(passedTokens){
         resolveQueue(opIndex, instrQueue, resolution); //remove these 3 tokens & replace with ID for the resolution
     }
     instrQueue = []; //for added measure, there should only be 1 token in the queue but it never hurts to empty it at conclusion
+}
+
+function order_while_loop(passedTokens){
+    var priorityMod = 0; //used to scope priority of operations
+    var instrQueue = new Array();
+    var tempToken;
+    var tempPriority;
+    var dontQueue = false;
+    for(var x = 0; x < passedTokens.length; x++){ //add passed tokens to instruction queue & priority
+        if(passedTokens[x].type !== "SPACE"){
+            tempToken = passedTokens[x];
+            dontQueue = false;
+            switch(passedTokens[x].type){//used to assign priority
+                case "COMPARE_EQUALS": //operations can have comparators, for some reason
+                case "LESS_THAN_EQUAL":
+                case "LESS_THAN":
+                case "GREATER_THAN_EQUAL":
+                case "GREATER_THAN":
+                case "NOT_EQUAL": tempPriority = 1 + priorityMod; //compares are that last things executed in this kind of operation
+                    break;
+                case "PLUS":
+                case "MINUS": tempPriority = 2 + priorityMod;
+                    break;
+                case "MULT":
+                case "DIV": tempPriority = 3 + priorityMod;
+                    break;
+                case "MOD":
+                case "EXPONENTIAL": tempPriority = 4 + priorityMod;
+                    break;
+                case "LPAREN": priorityMod += 10; //all parenthised operations need to be executed before a higher priority external instr.
+                    dontQueue = true;
+                    break;
+                case "RPAREN": priorityMod -= 10;
+                    dontQueue = true;
+                    break;
+                case "COLON": //this should be passed, but it does'nt need to be queued
+                case "END_OF_LINE": dontQueue = true; //this shouldn't be passed to begin with, but ensure it isn't queued
+                    break;
+                default: //ID, number, boolean, While, etc.
+                    tempPriority = -1;
+                    break;
+
+            }
+            let rawInstr = { //let has scope only within if statement
+                token: tempToken,
+                priority: tempPriority
+            };
+            if(!dontQueue){
+                instrQueue.push(rawInstr);//add the instr to the queue of operations getting resolved
+            }
+        }
+    }
+    
+    for(var x = 0; x < instrQueue.length; x++){
+        document.write(instrQueue[x].token.id + " ");
+    }
+    document.write("<br>");
+    for(var x = 0; x < instrQueue.length; x++){
+        document.write(instrQueue[x].priority.toString() + " ");
+    }
+    document.write("<br>");
+    
+    var opIndex = 1;
+    var currentOp;
+    var val1;
+    var val2;
+    var resolution;
+    var mathOps = ["PLUS", "MINUS", "MULT", "DIV", "MOD"]; //list of operations that can be resolved in an assign statement before assigning
+    var compareOps = ["COMPARE_EQUALS", "LESS_THAN", "LESS_THAN_EQUAL", "GREAT_THAN", "GREATER_THAN_EQUAL", "NOT_EQUAL"];
+    while(instrQueue.length > 2){ //while loops should boil down to "while ____" (the unfilled should be some boolean or value)
+        // get the 3 tokens operated on
+        opIndex = priorityPop(instrQueue);
+        val1 = instrQueue[opIndex-1].token;
+        currentOp = instrQueue[opIndex].token;
+        val2 = instrQueue[opIndex+1].token;
+        //resolve any preceding negatives on these values
+        if(val1.id.charAt(0) === "+" || val1.id.charAt(0) === "-"){
+            let newVal = resolvePrecedingOperators(val1); //pass token, return string to update the value
+            val1.id = newVal;
+        }
+        if(val2.id.charAt(0) === "+" || val2.id.charAt(0) === "-"){
+            let newVal = resolvePrecedingOperators(val2); //pass token, return string to update the value
+            val2.id = newVal;
+        }
+        //perform the operation
+        if(mathOps.includes(currentOp.type)){ //if the next prioritized operation is math, go to resolve Math
+            resolution = resolveMath(val1, currentOp, val2);
+        }else if(compareOps.includes(currentOp.type)){ //check if it is a comparator
+            resolution = resolveCompare(val1, currentOp, val2);
+        }//else a potential error
+        resolveQueue(opIndex, instrQueue, resolution); //remove these 3 tokens & replace with ID for the resolution
+    }
+    //resolve the state of the while loop
+    val1 = instrQueue[1].token; //at this point its only "while ____";
+    var takeBranch = resolve_value_True_or_False(val1);
+    if(takeBranch){
+        pushInstr("The While loop evaluated to True, take the path", "" , cmdCount, val1.line_no, 0);
+        //read & store nested instructions
+    }else{
+        pushInstr("The While loop evaluated to False, don't take the path", "" , cmdCount, val1.line_no, 0);
+        //skip nested instructions
+    }
+    //check conditional & possibly loop again
+    
 }
 
 function resolvePrecedingOperators(resolveToken){ //step by step resolution of "++--+#"
@@ -387,11 +512,17 @@ function convertTokenToValue(token){
                     token.id = "-" + token.id;
                 value = token.id;
                 break;
+            case "True":
+                value = 1;
+                break;
+            case "False":
+                value = 0;
+                break;
         }
     }
     result = value;
     //push any conversion instruction, such as a variable to its vValue or a binary to its base 10 equivalent
-    if(token.type !== "NUMBER" && token.type !== "FLOAT"){ //nothing to really show on that conversion
+    if(token.type !== "NUMBER" && token.type !== "FLOAT" && token.type !== "True" && token.type !== "False"){ //nothing to really show on that conversion
         pushInstr("Value " + instr, " is resolved to " + result, cmdCount, token.line_no, 0);
     }
     return value;
@@ -478,7 +609,9 @@ function resolveCompare(val1, op, val2){
     instr = num1 + " " + op.id + " " + num2;
     //push the math operation performed
     pushInstr("Comparison " + instr, " is resolved to " + resolved, cmdCount, lineN, 0);
-    var resultType = "BOOLEAN"; //determined later
+    var resultType = "False"; //boolean is not a lexer type, only True or False
+    if(resolved === "True")
+        resultType = "True";
     var resolution = {
         result: resolved + "",
         type: resultType
@@ -553,4 +686,13 @@ function resolveAssign(val1, op, val2){
         type: resultType
     };
     return resolution;
+}
+
+//called on conditionals, such as if, elif, or while
+function resolve_value_True_or_False(passedVal){
+    var tokenValue = convertTokenToValue(passedVal);
+    var isTrue = true;
+    if(tokenValue === 0)
+        isTrue = false;
+    return isTrue;
 }

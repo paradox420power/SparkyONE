@@ -10,7 +10,8 @@ function main(){
    //var input = prompt("INPUT:")
     
     var input =
-"a = b = 4 + 3 + 5";
+"andy = 1 + 2\n\
+bill = andy - -3";
     let lexeme; //used in lexer debugging
     
     document.write("Input Code: " + input + "<br><br>");
@@ -22,7 +23,7 @@ function main(){
         lexeme = getToken(tmpInput, true);
         tmpInput = tmpInput.slice(lexeme.length);
         if(lexeme.type !== "SPACE")
-            document.write("ID: " + lexeme.id + ", Type: " + lexeme.type + ", Length: " + lexeme.length + ", Line: " + lexeme.line_no + "<br>");
+            document.write("ID: " + lexeme.id + ", Type: " + lexeme.type + ", Length: " + lexeme.length + ", Line: " + lexeme.line_no + ", Uses characters " + lexeme.charStart + "-" + lexeme.charEnd + "<br><br>");
     }
     
     document.write("<br><b>Parser:</b><br>");
