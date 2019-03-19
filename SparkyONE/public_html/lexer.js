@@ -19,6 +19,13 @@ var reservedWord = ["True", "False", "None", "abs", "and", "as", "ascii", "asser
 
 var code_line = 1;
 var lastTokenType = ""; //used to help differentiate +, ++, & +-+-++3... because python
+var currentLineCharIndex = 0; //used for highlighting purposes during visualization
+
+function lexer_cleanUp(){//resets all global fields on new code call
+    code_line = 1;
+    lastTokenType = "";
+    currentLineCharIndex = 0;
+}
 
 function getChar(myString){
     var nextChar = null;
@@ -686,7 +693,7 @@ function readString(input){
  * as lexeme.id, the token type as lexeme.type, what line it was encountered on as lexeme.line_no,
  * and the length of the input which will be should be removed from the input after return (i.e. call input.slice(length))
  */
-var currentLineCharIndex = 0; //used for highlighting purposes during visualization
+
 function getToken(input, updateLastToken){
     let lexeme = {
         id:"default", //the exact input from the string

@@ -6,9 +6,11 @@
 
 function main(){
 
-
+    lexer_cleanUp();
+    instrMaker_cleanUp(); //reset from any prior code inputs
     
     var input =document.getElementById("inputField").value;
+    document.getElementById("outputField").value = "";
     var output;
     var lexeme; //used in lexer debugging
     

@@ -4,6 +4,14 @@ var funcList = new Array(); //list of callable functions
 var varList = new Array(); //list of declared variables
 var cmdCount = 1; //this is the instruction on, (instr); or (instr)\n should increment this value
 
+//this cleans all the arrays & is called by testFile at start of a main call
+function instrMaker_cleanUp(){
+    instrList = [];
+    funcList = [];
+    varList = [];
+    cmdCount = 1;
+}
+
 //instruction list operations
 function pushInstr(inst, result, cmd, lineN, nextL){
     var instruction = {
