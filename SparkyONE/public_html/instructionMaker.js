@@ -4,8 +4,16 @@ var funcList = new Array(); //list of callable functions
 var varList = new Array(); //list of declared variables
 var cmdCount = 1; //this is the instruction on, (instr); or (instr)\n should increment this value
 
+//this cleans all the arrays & is called by testFile at start of a main call
+function instrMaker_cleanUp(){
+    instrList = [];
+    funcList = [];
+    varList = [];
+    cmdCount = 1;
+}
+
 //instruction list operations
-function pushInstr(inst, result, cmd, lineN, nextL){
+function pushInstr(inst, result, cmd, lineN, nextL){ //INSTR = abs of -1, result = resolves to 1
     var instruction = {
         instr: inst, //atmoic instruction occuring
         result: result, //output of that instruction
@@ -85,6 +93,10 @@ function getVarValue(index){
     return varList[index].value;
 }
 
+function getVarType(index){
+    return varList[index].type;
+}
+
 //push new string to the given index vValue
 function updateVarValue(index, newVal){
     varList[index].value = newVal;
@@ -117,6 +129,31 @@ var lineTokens = new Array(); //honestly, fuck the fact array.push() adds a poin
 function appendTokenList(item){ //because lexeme is dynamically updated in a list
     var temp = item;
     lineTokens.push(temp);
+}
+
+function skipEmptyLines(input){
+    var token = getToken(input, false);
+    var token2;
+    if(token.type === "SPACE" || token.type === "SEMICOLON"){
+        input = input.slice(token.length); //slice off the spaces
+        token2 = getToken(input, false);
+        if(token2.type === "END_OF_LINE"){ //if next is line break, its ok
+            readEmptyLines();
+        }else{ //some keyword was read & the spaces could be indent that need to be read
+            if(token.type === "SPACE"){
+                for(i = 0; i < token.length; i++){
+                    input = " " + input;
+                }
+                //increase_indent();
+            }else{
+                input = token.id + "" + input; //add spliced id back to front of program
+            }
+        }
+    }else if(token.type === "END_OF_LINE"){
+        input = input.slice(token.length);
+        readEmptyLines();
+    }
+    return input;
 }
 
 //unrefined starting class that directs instruction to their according method for complete resolution, currently only directs to assign statements
@@ -172,6 +209,10 @@ function create_instructions(input){
                 break;
             case "IF":
                 break;
+            case "SEMICOLON": //usually sliced at end of instruction lnie, this catches ";;"
+            case "SPACE":
+            case "END_OF_LINE": input = skipEmptyLines(input);
+                break;
             default: document.write("Error ");
                 input = input.slice(1);
                 break;
@@ -198,21 +239,25 @@ function order_assign_statement(passedTokens){
             tempToken = passedTokens[x];
             dontQueue = false;
             switch(passedTokens[x].type){//used to assign priority
+                case "AND":
+                case "OR":
+                case "NOT": tempPriority = 1 + priorityMod;
+                    break;
                 case "COMPARE_EQUALS": //operations can have comparators, for some reason
                 case "LESS_THAN_EQUAL":
                 case "LESS_THAN":
                 case "GREATER_THAN_EQUAL":
                 case "GREATER_THAN":
-                case "NOT_EQUAL": tempPriority = 1 + priorityMod; //compares are that last things executed
+                case "NOT_EQUAL": tempPriority = 2 + priorityMod;
                     break;
                 case "PLUS":
-                case "MINUS": tempPriority = 2 + priorityMod;
+                case "MINUS": tempPriority = 3 + priorityMod;
                     break;
                 case "MULT":
-                case "DIV": tempPriority = 3 + priorityMod;
+                case "DIV": tempPriority = 4 + priorityMod;
                     break;
                 case "MOD":
-                case "EXPONENTIAL": tempPriority = 4 + priorityMod;
+                case "EXPONENTIAL": tempPriority = 5 + priorityMod;
                     break;
                 case "ADD_ASSIGN":
                 case "SUB_ASSIGN":
@@ -248,13 +293,13 @@ function order_assign_statement(passedTokens){
     }
     
     for(var x = 0; x < instrQueue.length; x++){
-        document.write(instrQueue[x].token.id + " ");
+        document.getElementById("outputField").value += instrQueue[x].token.id + " ";
     }
-    document.write("<br>");
+    document.getElementById("outputField").value += "\n";
     for(var x = 0; x < instrQueue.length; x++){
-        document.write(instrQueue[x].priority.toString() + " ");
+        document.getElementById("outputField").value += instrQueue[x].priority.toString() + " ";
     }
-    document.write("<br>");
+    document.getElementById("outputField").value += "\n";
     
     var opIndex = 1;
     var currentOp;
@@ -263,6 +308,7 @@ function order_assign_statement(passedTokens){
     var resolution;
     var mathOps = ["PLUS", "MINUS", "MULT", "DIV", "MOD"]; //list of operations that can be resolved in an assign statement before assigning
     var compareOps = ["COMPARE_EQUALS", "LESS_THAN", "LESS_THAN_EQUAL", "GREAT_THAN", "GREATER_THAN_EQUAL", "NOT_EQUAL"];
+    var logicalOps = ["AND", "OR", "NOT"];
     while(instrQueue.length > 1){ //assignments should resolve down to a single vlaue remaining (and it is what was assigned to a variable)
         // get the 3 tokens operated on
         opIndex = priorityPop(instrQueue);
@@ -283,6 +329,8 @@ function order_assign_statement(passedTokens){
             resolution = resolveMath(val1, currentOp, val2);
         }else if(compareOps.includes(currentOp.type)){ //check if it is a comparator
             resolution = resolveCompare(val1, currentOp, val2);
+        }else if(logicalOps.includes(currentOp.type)){
+            resolution = resolveLogicalOp(val1, currentOp, val2);
         }else{ //else it assumed to be an assignment statement
             resolution = resolveAssign(val1, currentOp, val2);
         }
@@ -302,21 +350,25 @@ function order_while_loop(passedTokens){
             tempToken = passedTokens[x];
             dontQueue = false;
             switch(passedTokens[x].type){//used to assign priority
+                case "AND":
+                case "OR":
+                case "NOT": tempPriority = 1 + priorityMod;
+                    break;
                 case "COMPARE_EQUALS": //operations can have comparators, for some reason
                 case "LESS_THAN_EQUAL":
                 case "LESS_THAN":
                 case "GREATER_THAN_EQUAL":
                 case "GREATER_THAN":
-                case "NOT_EQUAL": tempPriority = 1 + priorityMod; //compares are that last things executed in this kind of operation
+                case "NOT_EQUAL": tempPriority = 2 + priorityMod; //compares are that last things executed in this kind of operation
                     break;
                 case "PLUS":
-                case "MINUS": tempPriority = 2 + priorityMod;
+                case "MINUS": tempPriority = 3 + priorityMod;
                     break;
                 case "MULT":
-                case "DIV": tempPriority = 3 + priorityMod;
+                case "DIV": tempPriority = 4 + priorityMod;
                     break;
                 case "MOD":
-                case "EXPONENTIAL": tempPriority = 4 + priorityMod;
+                case "EXPONENTIAL": tempPriority = 5 + priorityMod;
                     break;
                 case "LPAREN": priorityMod += 10; //all parenthised operations need to be executed before a higher priority external instr.
                     dontQueue = true;
@@ -343,13 +395,13 @@ function order_while_loop(passedTokens){
     }
     
     for(var x = 0; x < instrQueue.length; x++){
-        document.write(instrQueue[x].token.id + " ");
+        document.getElementById("outputField").value += instrQueue[x].token.id + " ";
     }
-    document.write("<br>");
+    document.getElementById("outputField").value += "\n";
     for(var x = 0; x < instrQueue.length; x++){
-        document.write(instrQueue[x].priority.toString() + " ");
+        document.getElementById("outputField").value += instrQueue[x].priority.toString() + " ";
     }
-    document.write("<br>");
+    document.getElementById("outputField").value += "\n";
     
     var opIndex = 1;
     var currentOp;
@@ -358,6 +410,7 @@ function order_while_loop(passedTokens){
     var resolution;
     var mathOps = ["PLUS", "MINUS", "MULT", "DIV", "MOD"]; //list of operations that can be resolved in an assign statement before assigning
     var compareOps = ["COMPARE_EQUALS", "LESS_THAN", "LESS_THAN_EQUAL", "GREAT_THAN", "GREATER_THAN_EQUAL", "NOT_EQUAL"];
+    var logicalOps = ["AND", "OR", "NOT"];
     while(instrQueue.length > 2){ //while loops should boil down to "while ____" (the unfilled should be some boolean or value)
         // get the 3 tokens operated on
         opIndex = priorityPop(instrQueue);
@@ -378,6 +431,8 @@ function order_while_loop(passedTokens){
             resolution = resolveMath(val1, currentOp, val2);
         }else if(compareOps.includes(currentOp.type)){ //check if it is a comparator
             resolution = resolveCompare(val1, currentOp, val2);
+        }else if(logicalOps.includes(currentOp.type)){
+            resolution = resolveLogicalOp(val1, currentOp, val2);
         }//else a potential error
         resolveQueue(opIndex, instrQueue, resolution); //remove these 3 tokens & replace with ID for the resolution
     }
@@ -473,10 +528,21 @@ function convertTokenToValue(token){
         instr = "\"" + instr + "\""; //when pushing conversion instruction it will read "Value "var" "
         index = varIsDeclared(token.id);
         if(index !== -1){//not a new variable
-            value = Number.parseInt(getVarValue(index), 10);//assumes to be an int at this point
+            var valueType = getVarType(index);
+            if(valueType === "TRUE"){
+                value = 1;
+                result = "True";
+            }else if(valueType === "FALSE"){
+                value = 0;
+                result = "False";
+            }else{
+                value = Number.parseInt(getVarValue(index), 10);//assumes to be an int at this point
+                result = value;
+            }
         }else{//new variable, but it can't be declared here
             
         }
+        pushInstr("Variable " + instr, " is resolved to " + result, cmdCount, token.line_no, 0);
     }else{
         switch(token.type){
             case "FLOAT":
@@ -512,18 +578,18 @@ function convertTokenToValue(token){
                     token.id = "-" + token.id;
                 value = token.id;
                 break;
-            case "True":
+            case "TRUE":
                 value = 1;
                 break;
-            case "False":
+            case "FALSE":
                 value = 0;
                 break;
         }
-    }
-    result = value;
-    //push any conversion instruction, such as a variable to its vValue or a binary to its base 10 equivalent
-    if(token.type !== "NUMBER" && token.type !== "FLOAT" && token.type !== "True" && token.type !== "False"){ //nothing to really show on that conversion
-        pushInstr("Value " + instr, " is resolved to " + result, cmdCount, token.line_no, 0);
+        //push hex, oct, & binary conversion
+        if(token.type === "BINARY" || token.type === "OCTAL" || token.type === "HEX"){ //nothing to really show on that conversion
+            result = value;
+            pushInstr("Value " + instr, " is resolved to " + result, cmdCount, token.line_no, 0);
+        }
     }
     return value;
 }
@@ -609,11 +675,43 @@ function resolveCompare(val1, op, val2){
     instr = num1 + " " + op.id + " " + num2;
     //push the math operation performed
     pushInstr("Comparison " + instr, " is resolved to " + resolved, cmdCount, lineN, 0);
-    var resultType = "False"; //boolean is not a lexer type, only True or False
+    var resultType = "FALSE"; //boolean is not a lexer type, only True or False
     if(resolved === "True")
-        resultType = "True";
+        resultType = "TRUE";
     var resolution = {
         result: resolved + "",
+        type: resultType
+    };
+    return resolution;
+}
+
+function resolveLogicalOp(val1, op, val2){
+    var instr, result, lineN;
+    lineN = op.lineNo;
+    var bool1, bool2;
+    bool1 = convertTokenToValue(val1);
+    bool2 = convertTokenToValue(val2);
+    instr = "Comparing " + val1.id + " " + op.id + " " + val2.id + " ";
+    switch(op.type){
+        case "AND": result = bool1 && bool2;
+            break;
+        case "OR": result = bool1 || bool2;
+            break;
+        case "NOT": 
+            break;
+    }
+    var resultType;
+    if(result === 1){
+        result = "True";
+        resultType = "TRUE";
+    }else{
+        result = "False";
+        resultType = "FALSE";
+    }
+    pushInstr(instr, "is resolved to " + result, cmdCount, lineN, 0);
+    console.log(result);
+    var resolution = {
+        result: result + "",
         type: resultType
     };
     return resolution;
@@ -625,9 +723,10 @@ function resolveAssign(val1, op, val2){
     let tmpOp = op;
     switch(op.type){
         case "ASSIGN_EQUALS":
-            instr = val1.id + " " + op.id + " " + val2.id;
-            newVal = val2.id;
-            resolved = val2.id + " assigned to variable \"" + val1.id + "\"";
+            var numToAssign = convertTokenToValue(val2); //hex, oct, & bin not always resolved prior in this case
+            instr = val1.id + " " + op.id + " " + numToAssign;
+            newVal = numToAssign;
+            resolved = numToAssign + " assigned to variable \"" + val1.id + "\"";
             break;
         case "ADD_ASSIGN":
             tmpOp.id = "+";
