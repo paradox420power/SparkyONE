@@ -318,6 +318,7 @@ function order_assign_statement(passedTokens){
     var prefixLength = 0;
     var suffixLength = 0;
     var hasPrefixLength, hasSuffixLength, tmpIndex;
+    var validOp = false; //used to check for misunderstandings in the tokens before operating
     var resolution;
     var mathOps = ["PLUS", "MINUS", "MULT", "DIV", "MOD"]; //list of operations that can be resolved in an assign statement before assigning
     var compareOps = ["COMPARE_EQUALS", "LESS_THAN", "LESS_THAN_EQUAL", "GREAT_THAN", "GREATER_THAN_EQUAL", "NOT_EQUAL"];
@@ -331,6 +332,7 @@ function order_assign_statement(passedTokens){
         val1 = val2 = null; //reset these to help catch errors
         prefixLength = suffixLength = 0; //reset these lengths
         hasPrefixLength = hasSuffixLength = false;
+        validOp = false;
         //get all tokens before this operation pertaining to its execution
         tmpIndex = opIndex - 1; //go 1 to the left in the instrQueue
         //console.log("OP " + instrQueue[opIndex].token.id);
@@ -376,27 +378,41 @@ function order_assign_statement(passedTokens){
             }
         }
         
-        //perform the operation
-        if(mathOps.includes(currentOp.type)){ //if the next prioritized operation is math, go to resolve Math
-            if((currentOp.type === "PLUS" || currentOp.type === "MINUS") && prefixLength === 0){ //special check case of -(-2) where the "-" outside paren is seen as a minus
-                val2.id = currentOp.id + val2.id; //concat the op to the front of the value
-                let newVal = resolvePrecedingOperators(val2); //resolve it like a normal -- or -+ instance
-                val2.id = newVal;
-                resolution = {
-                    result: val2.id + "",
-                    type: val2.type
-                };
-            }else
-                resolution = resolveMath(val1, currentOp, val2);
-        }else if(compareOps.includes(currentOp.type)){ //check if it is a comparator
-            resolution = resolveCompare(val1, currentOp, val2);
-        }else if(logicalOps.includes(currentOp.type)){
-            resolution = resolveLogicalOp(val1, currentOp, val2);
-            if(currentOp.type === "NOT")
-                prefixLength = 0; //even if a valid token was in front of "not" it didn't actually perform in this operation
-        }else{ //else it assumed to be an assignment statement
-            resolution = resolveAssign(val1, currentOp, val2);
+        //need to check there isn't an instance of 3 + --(-2), because the "-" in "+--" is seens a subtraction w/out operators & should be concat to -2
+        if(prefixLength === 0 && suffixLength === 0){
+            //we need to resolve the instrQueue to account for incorrect - & + before a number
+            tmpIndex = opIndex + 1;
+            hasSuffixLength = false;
+            let unassignedOps = ""; //these will be concat to the front of the next id/number token
+            //TODO
+        }else{ //there was a prefix or suffix to perform the operation upon
+            validOp = true;
         }
+        
+        //perform the operation
+        if(validOp){
+            if(mathOps.includes(currentOp.type)){ //if the next prioritized operation is math, go to resolve Math
+                if((currentOp.type === "PLUS" || currentOp.type === "MINUS") && prefixLength === 0){ //special check case of -(-2) where the "-" outside paren is seen as a minus
+                    val2.id = currentOp.id + val2.id; //concat the op to the front of the value
+                    let newVal = resolvePrecedingOperators(val2); //resolve it like a normal -- or -+ instance
+                    val2.id = newVal;
+                    resolution = {
+                        result: val2.id + "",
+                        type: val2.type
+                    };
+                }else
+                    resolution = resolveMath(val1, currentOp, val2);
+            }else if(compareOps.includes(currentOp.type)){ //check if it is a comparator
+                resolution = resolveCompare(val1, currentOp, val2);
+            }else if(logicalOps.includes(currentOp.type)){
+                resolution = resolveLogicalOp(val1, currentOp, val2);
+                if(currentOp.type === "NOT")
+                    prefixLength = 0; //even if a valid token was in front of "not" it didn't actually perform in this operation
+            }else{ //else it assumed to be an assignment statement
+                resolution = resolveAssign(val1, currentOp, val2);
+            }
+        }
+        //regardless of op validity, a resolution is needed
         resolveQueue(opIndex, instrQueue, resolution, prefixLength, suffixLength); //remove these tokens & replace with ID for the resolution
         
         //for debugging purposes
@@ -609,12 +625,15 @@ function convertTokenToValue(token){
             }else if(valueType === "FALSE"){
                 value = 0;
                 result = "False";
+            }else if(valueType === "FLOAT"){
+                value = Number.parseFloat(getVarValue(index));
+                result = value;
             }else{
                 value = Number.parseInt(getVarValue(index), 10);//assumes to be an int at this point
                 result = value;
             }
         }else{//new variable, but it can't be declared here
-            
+            //Undecalred variable error to put here
         }
         pushInstr("Variable " + instr, " is resolved to " + result, cmdCount, token.line_no, 0);
     }else{
@@ -668,6 +687,56 @@ function convertTokenToValue(token){
     return value;
 }
 
+//This method takes in 2 tokens & compares their type and what operation i performed between them
+//it then returns a string that is the type of the rseulting token
+//It will also catch type mismatch operations
+function getResultType(token1, operation, token2){
+    var resultType;
+    if(token1.type === "ID"){//resolve variable type by checking declared variables
+        let index = varIsDeclared(token1.id);
+        if(index !== -1){//varialbe is declared
+            type1 = getVarType(index);
+        }else{
+            //undeclared variable error to go here
+        }
+    }
+    if(token2.type === "ID"){//resolve variable type by checking declared variables
+        let index = varIsDeclared(token2.id);
+        if(index !== -1){//varialbe is declared
+            type2 = getVarType(index);
+        }else{
+            //undeclared variable error to go here
+        }
+    }
+    
+    var mathOps = ["PLUS", "MINUS", "MULT", "DIV", "MOD"]; //list of operations that can be resolved in an assign statement before assigning
+    //boolean operations (such as "==" of "and") are handled in the resolve Method
+    var incompatTypes = [];
+    if(mathOps.includes(operation.type)){
+        if(token1.type === "FLOAT" || token2.type === "FLOAT"){
+            incompatTypes = ["STRING"];
+            if(! (incompatTypes.includes(token1.type) || incompatTypes.includes(token2.type)) ){ //cannot math op a float & string
+                resultType = "FLOAT";
+            }else{
+                //ERROR, type mismatch
+            }
+        }else if(token1.type === "STRING" || token2.type === "STRING"){
+            incompatTypes = ["FLOAT", "NUMBER", "BINARY", "OCTAL", "HEX", "TRUE", "FALSE"];
+            if(! (incompatTypes.includes(token1.type) || incompatTypes.includes(token2.type)) ){ //cannot math op a float & string
+                resultType = "STRING";
+            }else{
+                //ERROR, type mismatch
+            }
+            //TODO
+        }else{ //all other math ops should resolve to a number
+            resultType = "NUMBER";
+        }
+        
+    }//no else, but should circumstance demand this can be expanded
+    
+    return resultType;
+}
+
 function resolveMath(val1, op, val2){
     var instr, resolved, lineN;
     lineN = op.line_no;
@@ -694,7 +763,7 @@ function resolveMath(val1, op, val2){
     instr = num1 + " " + op.id + " " + num2;
     //push the math operation performed
     pushInstr("Operation " + instr, " is resolved to " + resolved, cmdCount, lineN, 0);
-    var resultType = "NUMBER"; //determined later
+    var resultType = getResultType(val1, op, val2); //check result type & if passed types are comapatible with that operation
     var resolution = {
         result: resolved + "",
         type: resultType
