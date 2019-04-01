@@ -624,6 +624,16 @@ function parse_assign_stmt(){
                     token = peek();
                 }
             }
+        }else if(["PLUS", "MINUS", "INCREMENT", "DECREMENT"].includes(token.type)){
+            expect(token.type);
+            token = peek();
+            while(["PLUS", "MINUS", "INCREMENT", "DECREMENT"].includes(token.type)){
+                expect(token.type);
+                token = peek();
+            }
+            if(["LPAREN", "NUMBER", "FLOAT", "TRUE", "FALSE"].includes(token.type)){
+                parse_expr();
+            }
         }else{
             //TO DO
             //Probably get rid of the switch case altogether and just call parse_expr?
@@ -638,7 +648,6 @@ function parse_assign_stmt(){
                 case "QUOTE": 
                 case "NONE":
                 case "MATH":
-                case "RANDOM":
                 case "CEIL":
                 case "FLOOR":
                 case "SQRT": 
@@ -885,6 +894,24 @@ function parse_tuple_content(){
     if(token.type === "LPAREN"){
         parse_tuple();
         token = peek();
+        //There could be an operator/expression that occurs after the use of parenthesis 
+        var multi_operations = ["PLUS", "MINUS", "INCREMENT", "DECREMENT"];
+        var operations = ["MULT", "DIV", "MOD", "EXPONENTIAL", "IN", "NOTIN", "IS", "ISNOT"];
+        
+        //Handles instances of operators that can appear in succession such as ++--+-+-+-+5
+        if(multi_operations.includes(token.type)){
+            while(multi_operations.includes(token.type)){
+                expect(token.type);
+                token = peek();
+            }
+            if(["LPAREN", "NUMBER", "FLOAT", "TRUE", "FALSE"].includes(token.type)){
+                parse_expr();
+            }
+        }else if(operations.includes(token.type)){
+            parse_op();
+            parse_expr();
+        }
+        
         if(token.type === "COMMA"){
             expect("COMMA");
             token = peek();
@@ -897,21 +924,35 @@ function parse_tuple_content(){
             }
         }
     }else{
-        parse_expr();
-        token = peek();
-        if(token.type === "COMMA"){
-            expect("COMMA");
-            token = peek();
-            if(token.type === "RPAREN"){
-                //do nothing, returns to initial call
-            }else if(token.type === "COMMA"){//Invalid syntax/excessive commas. list = (1,2,3,,)
-                syntax_error("");//INSERT SYNTAX ERROR
-            }else{
-                parse_tuple_content();
+        //There could be an operator/expression that occurs after the use of parenthesis 
+        var multi_operations = ["PLUS", "MINUS", "INCREMENT", "DECREMENT"];
+
+        //Handles instances of operators that can appear in succession such as ++--+-+-+-+5
+        if(multi_operations.includes(token.type)){
+            while(multi_operations.includes(token.type)){
+                expect(token.type);
+                token = peek();
             }
+            if(["LPAREN", "NUMBER", "FLOAT", "TRUE", "FALSE"].includes(token.type)){
+                parse_expr();
+            }
+        }else{
+            parse_expr();
+            token = peek();
+            if(token.type === "COMMA"){
+                expect("COMMA");
+                token = peek();
+                if(token.type === "RPAREN"){
+                    //do nothing, returns to initial call
+                }else if(token.type === "COMMA"){//Invalid syntax/excessive commas. list = (1,2,3,,)
+                    syntax_error("");//INSERT SYNTAX ERROR
+                }else{
+                    parse_tuple_content();
+                }
+            }
+            //else do nothing
+            //Covers an expression being used inside parenthesis, but a tuple not being created.
         }
-        //else do nothing
-        //Covers an expression being used inside parenthesis, but a tuple not being created.
     }
 }
 
@@ -1045,9 +1086,20 @@ function parse_expr(){
     }
     
     token = peek();
-    var operations = ["PLUS", "MINUS", "MULT", "DIV", "MOD", "EXPO", "IN", "NOTIN", "IS", "ISNOT"];
+    var multi_operations = ["PLUS", "MINUS", "INCREMENT", "DECREMENT"];
+    var operations = ["MULT", "DIV", "MOD", "EXPONENTIAL", "IN", "NOTIN", "IS", "ISNOT"];
     var compare_ops = ["COMPARE_EQUALS", "NOT_EQUAL", "LESS_THAN", "LESS_THAN_EQUAL", "GREATER_THAN", "GREATER_THAN_EQUAL"];
-    if(operations.includes(token.type)){
+    
+    //Handles instances of operators that can appear in succession such as ++--+-+-+-+5
+    if(multi_operations.includes(token.type)){
+        while(multi_operations.includes(token.type)){
+            expect(token.type);
+            token = peek();
+        }
+        if(["LPAREN", "NUMBER", "FLOAT", "TRUE", "FALSE"].includes(token.type)){
+            parse_expr();
+        }
+    }else if(operations.includes(token.type)){
         parse_op();
         parse_expr();
     }else if(compare_ops.includes(token.type)){
@@ -1069,7 +1121,7 @@ function parse_op(){
             break;
         case "MOD": expect("MOD");
             break;
-        case "EXPO": expect("EXPO");
+        case "EXPONENTIAL": expect("EXPONENTIAL");
             break;
         case "IN": expect("IN");
             break;
