@@ -631,7 +631,7 @@ function parse_assign_stmt(){
                 expect(token.type);
                 token = peek();
             }
-            if(["LPAREN", "NUMBER", "FLOAT", "TRUE", "FALSE"].includes(token.type)){
+            if(["LPAREN", "NUMBER", "FLOAT", "TRUE", "FALSE", "ID"].includes(token.type)){
                 parse_expr();
             }
         }else{
@@ -904,7 +904,7 @@ function parse_tuple_content(){
                 expect(token.type);
                 token = peek();
             }
-            if(["LPAREN", "NUMBER", "FLOAT", "TRUE", "FALSE"].includes(token.type)){
+            if(["LPAREN", "NUMBER", "FLOAT", "TRUE", "FALSE", "ID"].includes(token.type)){
                 parse_expr();
             }
         }else if(operations.includes(token.type)){
@@ -933,7 +933,7 @@ function parse_tuple_content(){
                 expect(token.type);
                 token = peek();
             }
-            if(["LPAREN", "NUMBER", "FLOAT", "TRUE", "FALSE"].includes(token.type)){
+            if(["LPAREN", "NUMBER", "FLOAT", "TRUE", "FALSE", "ID"].includes(token.type)){
                 parse_expr();
             }
         }else{
@@ -1096,7 +1096,7 @@ function parse_expr(){
             expect(token.type);
             token = peek();
         }
-        if(["LPAREN", "NUMBER", "FLOAT", "TRUE", "FALSE"].includes(token.type)){
+        if(["LPAREN", "NUMBER", "FLOAT", "TRUE", "FALSE", "ID"].includes(token.type)){
             parse_expr();
         }
     }else if(operations.includes(token.type)){
