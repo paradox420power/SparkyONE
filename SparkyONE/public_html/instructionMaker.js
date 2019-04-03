@@ -704,3 +704,450 @@ function resolve_value_True_or_False(passedVal){
         isTrue = false;
     return isTrue;
 }
+
+function resolve_abs(token)
+{
+    var tokenVal = Math.abs(convertTokenToValue(token));
+    push_Instr("abs(" + token.id + ") ", "resolves to ", tokenVal + "", cmdCount, 0, 0);
+    
+    var resolution = {
+        result: tokenVal + "",
+        type: token.type
+    };
+    
+    return resolution;
+}
+
+function resolve_bin(token)
+{
+    var tokenVal = convertTokenToValue(token);
+    
+    if (tokenVal < 0)
+    {
+        tokenVal = tokenVal.toString(2);
+        var newVal = tokenVal.slice(0,1) + "0b" + tokenVal.slice(1);
+    }
+
+    else
+    {
+        var newVal = "0b" + tokenVal.toString(2);
+    }
+    
+    push_Instr("bin(" + token.id + ") ", "resolves to ", newVal + "", cmdCount, 0, 0);
+    
+    var resolution = {
+        result: newVal + "",
+        type: "BINARY"
+    };
+    
+    return resolution;
+}
+
+function resolve_bool(token)
+{  
+    if (token !== Null)
+    {
+        var tokenVal = resolve_value_True_or_False(token);  
+        if (tokenVal)
+        {
+            var resolution = {
+                result: "True",
+                type: "TRUE"
+            };
+
+            push_Instr("bool(" + token.id + ") ", "resolves to True", cmdCount, 0, 0);
+            return resolution;
+        }
+
+        else
+        {
+            var resolution = {
+                result: "False",
+                type: "FALSE"
+            };
+
+            push_Instr("bool(" + token.id + ") ", "resolves to False", cmdCount, 0, 0);
+            return resolution;
+        }
+    }
+    
+    else
+    {
+        var resolution = {
+            result: "False",
+            type: "FALSE"
+        };
+        push_Instr("bool(" + token.id + ") ", "resolves to False", cmdCount, 0, 0);
+        return resolution;
+    }
+}
+
+function resolve_chr(token)
+{
+    var tokenVal = convertTokenToValue(token);
+    var newVal = String.fromCharCode(tokenVal);
+    
+    var resolution = {
+        result: newVal + "",
+        type: "ASCII"
+    };
+    
+    push_Instr("chr(" + token.id + ") ", "resolves to ", cmdCount, 0, 0);
+    return resolution;
+}
+
+function resolve_float(token)
+{
+    var tokenVal = convertTokenToValue(token);
+    
+    if (Number.isInteger(tokenVal))
+    {
+        var newVal = tokenVal + ".0";
+        
+        var resolution = {
+            result: newVal + "",
+            type: "FLOAT"
+        };
+        push_Instr("float(" + token.id + ") ", "resolves to ", newVal + "", cmdCount, 0, 0);
+        
+        return resolution;
+    }
+    
+    else if (Number.isFloat(tokenVal))
+    {
+        var newVal = tokenVal;
+        
+        var resolution = {
+            result: newVal + "",
+            type: "FLOAT"
+        };
+        push_Instr("float(" + token.id + ") ", "resolves to ", newVal + "", cmdCount, 0, 0);
+        
+        return resolution;
+    }
+    
+    else if (tokenVal === "Infinity")
+    {
+        var newVal = tokenVal;
+        
+        var resolution = {
+            result: "inf",
+            type: "FLOAT"
+        };
+        push_Instr("float(" + token.id + ") ", "resolves to inf", cmdCount, 0, 0);
+        
+        return resolution;
+    }
+    
+    else if (tokenVal === "-Infinity")
+    { 
+        var resolution = {
+            result: "-inf",
+            type: "FLOAT"
+        };
+        push_Instr("float(" + token.id + ") ", "resolves to -inf", cmdCount, 0, 0);
+        
+        return resolution;
+    }
+    
+    else
+    {
+        var resolution = {
+            result: "Unknown",
+            type: "ERROR"
+        };
+        push_Instr("float(" + token.id + ") ", "resolves to Unknown", cmdCount, 0, 0);
+        
+        return resolution;
+    }
+}
+
+function resolve_hex(token)
+{
+    var tokenVal = convertTokenToValue(token);
+    
+    if (tokenVal < 0)
+    {
+        tokenVal = tokenVal.toString(16);
+        var newVal = tokenVal.slice(0,1) + "0x" + tokenVal.slice(1);
+        
+        push_Instr("hex(" + token.id + ") ", "resolves to ", newVal, cmdCount, 0, 0);
+    }
+
+    else
+    {
+        var newVal = "0x" + tokenVal.toString(16);
+        
+        push_Instr("hex(" + token.id + ") ", "resolves to ", newVal, cmdCount, 0, 0);
+    }
+    
+    var resolution = {
+        result: newVal + "",
+        type: "ASCII"
+    };
+    
+    return resolution;
+}
+
+function resolve_len(token)
+{
+    var tokenVal = convertTokenToValue(token);
+    
+    if (typeof tokenVal === "string")
+    {
+        var newVal = tokenVal.length;
+        var resolution = {
+            result: newVal + "",
+            type: "ID"
+        };
+        
+        push_Instr("len(" + token.id + ") ", "resolves to ", newVal + "", cmdCount, 0, 0);  
+    }
+    
+    else
+    {       
+        var resolution = {
+            result: "Unknown",
+            type: "ERROR"
+        };        
+        
+        push_Instr("len(" + token.id + ") ", "resolves to Unknown", cmdCount, 0, 0);  
+    }
+        
+    return resolution;   
+}
+
+function resolve_oct(token)
+{
+    var tokenVal = convertTokenToValue(token);
+    
+    if (tokenVal < 0)
+    {
+        tokenVal = tokenVal.toString(8);
+        var newVal = tokenVal.slice(0,1) + "0o" + tokenVal.slice(1);
+        
+        push_Instr("oct(" + token.id + ") ", "resolves to ", newVal, cmdCount, 0, 0);
+    }
+
+    else
+    {
+        var newVal = "0o" + tokenVal.toString(8);
+        
+        push_Instr("oct(" + token.id + ") ", "resolves to ", newVal, cmdCount, 0, 0);
+    }
+ 
+    var resolution = {
+        result: newVal + "",
+        type: "ID"
+    };
+    
+    return resolution;
+}
+
+function resolve_ord(token)
+{
+    var tokenID = token.id;
+    
+    if ((typeof tokenID === "string") && (tokenID.length === 1))
+    {
+        var newVal = tokenID.charCodeAt();
+        
+        var resolution = {
+            result: newVal + "",
+            type: "INTEGER"
+        }; 
+        
+        push_Instr("ord(" + token.id + ") ", "resolves to ", newVal + "", cmdCount, 0, 0);
+    }
+    
+    else
+    {       
+        var resolution = {
+            result: "Unknown",
+            type: "ERROR"
+        };        
+        
+        push_Instr("ord(" + token.id + ") ", "resolves to Unknown", cmdCount, 0, 0);
+    }
+    
+    return resolution; 
+}
+
+function resolve_str(token)
+{
+    var tokenVal = convertTokenToValue(token);
+    
+    var newVal = tokenVal.toString();
+    
+    var resolution = {
+        result: newVal,
+        type: "STRING"
+    }; 
+    
+    push_Instr("str(" + token.id + ") ", "resolves to ", newVal, cmdCount, 0, 0);
+}
+
+function resolve_type(token)
+{
+    var tokenVal = convertTokenToValue(token);
+    
+    var newVal = typeof tokenVal;
+    
+    var resolution = {
+        result: newVal,
+        type: "STRING"
+    }; 
+  
+    push_Instr("type(" + token.id + ") ", "resolves to ", newVal, cmdCount, 0, 0);
+}
+
+function resolve_ceil(token)
+{
+    var tokenVal = convertTokenToValue(token);
+    
+    if (Number.isInteger(tokenVal) || Number.isFloat(tokenVal))
+    {
+        var newVal = Math.ceil(tokenVal);
+        
+        var resolution = {
+            result: newVal + "",
+            type: "ID"
+        };        
+    }
+    
+    else
+    {
+         var resolution = {
+            result: "Unknown",
+            type: "ID"
+        };       
+    }
+       
+    push_Instr("ceil(" + token.id + ") ", "resolves to ", cmdCount, 0, 0);
+    return resolution;
+}
+
+function resolve_floor(token)
+{
+    var tokenVal = convertTokenToValue(token);
+    
+    if (Number.isInteger(tokenVal) || Number.isFloat(tokenVal))
+    {
+        var newVal = Math.ceil(tokenVal);
+        
+        var resolution = {
+            result: newVal + "",
+            type: "ID"
+        };        
+    }
+    
+    else
+    {
+        var resolution = {
+            result: "Unknown",
+            type: "ID"
+        };       
+    }
+       
+    push_Instr("floor(" + token.id + ") ", "resolves to ", cmdCount, 0, 0);
+    return resolution;
+}
+
+function resolve_sqrt(token)
+{
+    var tokenVal = convertTokenToValue(token);
+    
+    var newVal = Math.sqrt(tokenVal);
+    var resolution = {
+        result: newVal + "",
+        type: "FLOAT"
+    };
+    
+    push_Instr("sqrt(" + token.id + ") ", "resolves to ", cmdCount, 0, 0);
+    return resolution;
+}
+
+function resolve_cos(token)
+{
+    var tokenVal = convertTokenToValue(token);
+    
+    var newVal = Math.cos(tokenVal);
+    
+    var resolution = {
+        result: newVal + "",
+        type: "FLOAT"
+    };    
+    
+    push_Instr("cos(" + token.id + ") ", "resolves to ", cmdCount, 0, 0);
+    return resolution;
+}
+
+function resolve_sin(token)
+{
+    var tokenVal = convertTokenToValue(token);
+    
+    var newVal = Math.sin(tokenVal);
+    
+    var resolution = {
+        result: newVal + "",
+        type: "FLOAT"
+    };    
+    
+    push_Instr("sin(" + token.id + ") ", "resolves to ", cmdCount, 0, 0);
+    return resolution;   
+}
+
+function resolve_built_ins(token)
+{
+    var res;
+    switch (token.id){
+        case "abs":
+            res = resolve_abs(token);
+            break;
+        case "bin":
+            res = resolve_bin(token);
+            break;
+        case "bool":
+            res = resolve_bool(token);
+            break;
+        case "chr":
+            res = resolve_chr(token);
+            break;
+        case "float":
+            res = resolve_float(token);
+            break;
+        case "hex":
+            res = resolve_hex(token);
+            break;
+        case "len":
+            res = resolve_len(token);
+            break;
+        case "oct":
+            res = resolve_oct(token);
+            break;
+        case "ord":
+            res = resolve_ord(token);
+            break;
+        case "str":
+            res = resolve_str(token);
+            break;
+        case "type":
+            res = resolve_type(token);
+            break;
+        case "cell":
+            res = resolve_cell(token);
+            break;
+        case "floor":
+            res = resolve_floor(token);
+            break;
+        case "sqrt":
+            res = resolve_sqrt(token);
+            break;
+        case "cos":
+            res = resolve_cos(token);
+            break;
+        case "sin":
+            res = resolve_sin(token);
+            break;
+    }
+}
