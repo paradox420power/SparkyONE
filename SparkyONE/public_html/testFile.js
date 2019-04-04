@@ -27,10 +27,11 @@ function main(){
            output += ("ID: " + lexeme.id + ", Type: " + lexeme.type + ", Length: " + lexeme.length + ", Line: " + lexeme.line_no + ", Uses characters " + lexeme.charStart + "-" + lexeme.charEnd + "\n" );
     }
     
-    //document.getElementById("outputField").value = output;
+    document.getElementById("outputField").value = output;
     
     output += "\nParser:  \n" ;
     
+    lexer_cleanUp();
     output += "\nRuntime:  \n";
 
     var instrList = new Array();

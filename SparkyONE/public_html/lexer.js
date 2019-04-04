@@ -18,12 +18,12 @@ var reservedWord = ["True", "False", "None", "abs", "and", "as", "ascii", "asser
     "raise", "randint", "random", "range", "return", "round", "seed", "sin", "str", "sqrt", "tan", "try", "type", "while", "with", "xrange", "yield", "format", "input"];
 
 var code_line = 1;
-var lastTokenType = ""; //used to help differentiate +, ++, & +-+-++3... because python
+var lastTokenType = "START_OF_LINE"; //used to help differentiate +, ++, & +-+-++3... because python
 var currentLineCharIndex = 0; //used for highlighting purposes during visualization
 
 function lexer_cleanUp(){//resets all global fields on new code call
     code_line = 1;
-    lastTokenType = "";
+    lastTokenType = "START_OF_LINE";
     currentLineCharIndex = 0;
 }
 
@@ -711,7 +711,7 @@ function getToken(input, updateLastToken){
     var operators = ["PLUS", "ADD_ASSIGN", "MINUS", "SUB_ASSIGN", "MULT", "MULT_ASSIGN", "EXPONENTIAL",
                     "DIV", "DIV_ASSIGN", "MOD", "MOD_ASSIGN", "GREATER_THAN", "GREATER_THAN_EQUAL",
                     "LESS_THAN", "LESS_THAN_EQUAL", "NOT_EQUAL", "COMPARE_EQUALS", "ASSIGN_EQUALS",
-                    "LPAREN", "LBRACE", "LBRACKET"]; //these might be followed by a number prefaced by + or -
+                    "LPAREN", "LBRACE", "LBRACKET", "START_OF_LINE"]; //these might be followed by a number prefaced by + or -
     var mathIndicators = ["NUMBER", "FLOAT", "BINARY", "OCTAL", "HEX"]; //a + or - prefaced by this should be careful
     var numbers = /^[0-9]+$/;
     if(input !== null || input !== ""){
@@ -725,11 +725,11 @@ function getToken(input, updateLastToken){
         switch(nextChar){
             case "+":
                 lexeme.length++;
-                if(input.charAt(1) === "+" && !mathIndicators.includes(lastTokenType)){ //3++ is increment, but 3++3 is not
+                /*if(input.charAt(1) === "+" && !mathIndicators.includes(lastTokenType)){ //3++ is increment, but 3++3 is not
                     lexeme.id = "++";
                     lexeme.type = "INCREMENT";
                     lexeme.length++;
-                }else if(input.charAt(1) === "="){
+                }else*/ if(input.charAt(1) === "="){
                     lexeme.id = "+=";
                     lexeme.type = "ADD_ASSIGN";
                     lexeme.length++;
@@ -740,11 +740,11 @@ function getToken(input, updateLastToken){
                 break;
             case "-":
                 lexeme.length++;
-                if(input.charAt(1) === "-" && !mathIndicators.includes(lastTokenType)){ //3-- is decrement, but 3--3 is not
+                /*if(input.charAt(1) === "-" && !mathIndicators.includes(lastTokenType)){ //3-- is decrement, but 3--3 is not
                     lexeme.id = "--";
                     lexeme.type = "DECREMENT";
                     lexeme.length++;
-                }else if(input.charAt(1) === "="){
+                }else*/ if(input.charAt(1) === "="){
                     lexeme.id = "-=";
                     lexeme.type = "SUB_ASSIGN";
                     lexeme.length++;
