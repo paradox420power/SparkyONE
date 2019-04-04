@@ -1,10 +1,18 @@
 //added INPUT in bgnTokens for testing purposes for now
 var bgnTokens = ["IMPORT", "FROM", "IF", "FOR", "WHILE", "ID", "HASH_TAG", "RETURN", "DEF"];
-var libFunctions = ["INPUT", "PRINT", "CEIL", "FLOOR", "SQRT", "COS", "SIN", "TAN", "PI", "E", "RANDOM", "SEED", "RANDINT"];
+var libFunctions = ["ABS", "BIN", "BOOL", "CHR", "FLOAT", "HEX", "LEN", "OCT", "ORD", "STR", "TYPE", "MIN", "MAX", "INT", 
+    "INPUT", "PRINT", "CEIL", "FLOOR", "SQRT", "COS", "SIN", "TAN", "PI", "E", "RANDOM", "SEED", "RANDINT"];
 var program = "";
 var indent_stack = [];
 //USED FOR TESTING FUTURE IMPLEMENTATION
 var insideDef = 0;
+//USED FOR TESTING WHETHER OR NOT THE PARSER RESULTED IN A SYNTAX_ERROR
+var testingResult = true;
+
+function test(input){
+    parse_begin_program(input);
+    return testingResult;
+}
 
 //print parsing error
 function error_expected_not_matching(expected, received, line_no){
@@ -267,6 +275,7 @@ function parse_import_stmt(){
                         }else{
                             //INSERT SYNTAX ERROR
                             syntax_error("");
+                            break;
                         }
                     }
                     expect("RPAREN");
@@ -426,6 +435,7 @@ function parse_stmt(){
             case "DEF": parse_function_full();
                 break;
             case "RETURN": 
+                //TO DO
                 //USED FOR TESTING FUTURE IMPLEMENTATION
                 if(insideDef > 0){
                     parse_return_stmt();
@@ -651,7 +661,8 @@ function parse_assign_stmt(){
                 }
             }
             //TO DO
-            //Probably get rid of the switch case altogether and just call parse_expr?
+            //Probably get rid of the switch case altogether and just call parse_expr
+            //Obviously excessive for final implementation
             switch(token.type){
                 case "LPAREN":
                 case "LBRACE":
@@ -662,6 +673,19 @@ function parse_assign_stmt(){
                 case "APOSTROPHE":
                 case "QUOTE": 
                 case "NONE":
+                case "ABS":
+                case "BIN":
+                case "BOOL":
+                case "CHR":
+                case "FLOAT":
+                case "HEX":
+                case "LEN":
+                case "OCT": 
+                case "ORD":
+                case "STR":
+                case "INT":
+                case "MAX":
+                case "MIN":
                 case "INPUT":
                 case "PRINT":
                 case "MATH":
@@ -1059,6 +1083,37 @@ function parse_expr(){
         parse_random_lib_function();
     }else if(libFunctions.includes(token.type)){
         switch(token.type){
+            case "ABS": parse_abs_function();
+                break;
+            case "BIN": parse_bin_function();
+                break;
+            case "BOOL": parse_bool_function();
+                break;
+            case "CHR": parse_chr_function();
+                break;
+            case "FLOAT": 
+                if(token.id === "float"){
+                    parse_float_function();
+                }else{
+                    parse_primary();
+                }
+                break;
+            case "HEX": parse_hex_function();
+                break;
+            case "LEN": parse_len_function();
+                break;
+            case "OCT": parse_oct_function();
+                break;
+            case "ORD": parse_ord_function();
+                break;
+            case "STR": parse_str_function();
+                break;
+            case "INT": parse_int_function();
+                break;
+            case "MAX": parse_max_function();
+                break;
+            case "MIN": parse_min_function();
+                break;
             case "INPUT": parse_input_stmt();
                 break;
             case "PRINT": parse_print_stmt();
@@ -1081,9 +1136,9 @@ function parse_expr(){
                 break;
             case "RANDOM": parse_random_function();
                 break;
-            case "RANDINT":
+            case "RANDINT": parse_randint_function();
                 break;
-            case "SEED":
+            case "SEED": parse_seed_function();
                 break;
             //INSERT SYNTAX ERROR
             default: syntax_error("");
@@ -1111,7 +1166,15 @@ function parse_expr(){
     }else if(compare_ops.includes(token.type)){
         parse_comparison_operator();
         parse_expr();
-    }//else do nothing
+    }/*else if(token.type === "COMMA"){
+        //TO DO
+        //COULD HAVE ADVERSE SIDE EFFECTS...
+        //This WILL have adverse side effects due functions using parse_expr() for argument values
+        //Adding this would cause multiple arguments to potentially read when they shouldn't be
+        //This would not be a useful solution, maybe a reimplementation of parse_multi_val() would
+        //assist this endeavor to add tuple functionality outside of assignment statements.
+        expect()
+    }*///else do nothing
 }
 
 function parse_op(){
@@ -1139,52 +1202,6 @@ function parse_op(){
             break;
         default: syntax_error("INVALID_OPERATOR");
             break;
-    }
-}
-
-//TO DO
-//Account for the unclusion of functions in the list of possible tokens read
-function parse_print_stmt(){
-    expect("PRINT");
-    expect("LPAREN");
-    var token = peek();
-    switch(token.type){
-        case "RPAREN": expect("RPAREN");
-            break;
-        case "ID":
-        case "NUMBER":
-        case "FLOAT":
-        case "TRUE":
-        case "FALSE":
-        case "LPAREN":
-        case "LBRACKET": 
-        case "LBRACE": 
-        case "APOSTROPHE": 
-        case "QUOTE":
-            parse_print_multi_val();
-            token = peek();
-            if(token.type === "RPAREN"){//TO DO: Can reduce this to just use expect("RPAREN"), instead of this if statement
-                expect("RPAREN");
-            }else{
-                syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
-            }
-            break;
-    }
-}
-
-//TO DO
-//Need to address implementation for String type eventually.
-//Currently this will account for every way to print with single input, or multiple inputs for the print function
-function parse_print_multi_val(){
-    var token = peek();
-    var valid_types = ["ID", "NUMBER", "FLOAT", "TRUE", "FALSE", "LPAREN", "LBRACKET", "LBRACE", "APOSTROPHE", "QUOTE"];
-    if(valid_types.includes(token.type)){
-        parse_expr();
-        var token = peek();
-        if(token.type === "COMMA"){
-            expect("COMMA");
-            parse_print_multi_val();
-        }
     }
 }
 
@@ -1293,7 +1310,6 @@ function parse_format_function(){
     //syntax is correct, check other constraints for "somestring".format(...)
     if(type === "APOSTROPHE" || type === "QUOTE"){
         //TO DO
-        //document.write("hi<br>");
         if(string_content.includes("{") || string_content.includes("}")){
             validate_format_string(string_content, parameterCount, namedParameters);
             
@@ -1441,21 +1457,6 @@ function named_format(potentialPairs, namedPara){
 
 }
 
-function parse_input_stmt(){
-    expect("INPUT");
-    expect("LPAREN");
-    var token = peek();
-    var primaries = ["FLOAT", "NUMBER", "ID", "TRUE", "FALSE", "LPAREN", "LBRACKET", "LBRACE", "APOSTROPHE", "QUOTE"];
-    if(token.type === "RPAREN"){
-        expect("RPAREN");
-    }else if(primaries.includes(token.type)){
-        parse_expr();
-        expect("RPAREN");
-    }else{
-        syntax_error("INVALID_INPUT");
-    }
-}
-
 function parse_comment(){
     expect("HASH_TAG");
     var token = peek();
@@ -1468,6 +1469,194 @@ function parse_comment(){
 //Built-in Functions
 //TO DO
 //Will we have to worry about the typing of functions, modules, etc. ?
+function parse_input_stmt(){
+    expect("INPUT");
+    expect("LPAREN");
+    var token = peek();
+    if(token.type === "RPAREN"){
+        expect("RPAREN");
+    }else{
+        parse_expr();
+        expect("RPAREN");
+    }
+}
+
+//TO DO
+//Account for the inclusion of functions in the list of possible tokens read
+function parse_print_stmt(){
+    expect("PRINT");
+    expect("LPAREN");
+    var token = peek();
+    switch(token.type){
+        case "RPAREN": expect("RPAREN");
+            break;
+        case "ID":
+        case "NUMBER":
+        case "FLOAT":
+        case "TRUE":
+        case "FALSE":
+        case "LPAREN":
+        case "LBRACKET": 
+        case "LBRACE": 
+        case "APOSTROPHE": 
+        case "QUOTE":
+            parse_print_multi_val();
+            token = peek();
+            if(token.type === "RPAREN"){//TO DO: Can reduce this to just use expect("RPAREN"), instead of this if statement
+                expect("RPAREN");
+            }else{
+                syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
+            }
+            break;
+    }
+}
+
+//TO DO
+//Need to address implementation for String type eventually.
+//Currently this will account for every way to print with single input, or multiple inputs for the print function
+function parse_print_multi_val(){
+    var token = peek();
+    var valid_types = ["ID", "NUMBER", "FLOAT", "TRUE", "FALSE", "LPAREN", "LBRACKET", "LBRACE", "APOSTROPHE", "QUOTE"];
+    if(valid_types.includes(token.type)){
+        parse_expr();
+        var token = peek();
+        if(token.type === "COMMA"){
+            expect("COMMA");
+            parse_print_multi_val();
+        }
+    }
+}
+
+function parse_abs_function(){
+    expect("ABS");
+    expect("LPAREN");
+    parse_expr();
+    expect("RPAREN");
+}
+
+function parse_bin_function(){
+    expect("BIN");
+    expect("LPAREN");
+    parse_expr();
+    expect("RPAREN");
+}
+
+function parse_bool_function(){
+    expect("BOOL");
+    expect("LPAREN");
+    
+    var token = peek();
+    if(token.type !== "RPAREN"){
+        parse_expr();
+        expect("RPAREN");
+    } else {
+        expect("RPAREN");
+    }
+}
+
+function parse_chr_function(){
+    expect("CHR");
+    expect("LPAREN");
+    parse_expr();
+    expect("RPAREN");
+}
+
+function parse_float_function(){
+    expect("FLOAT");
+    expect("LPAREN");
+    var token = peek();
+    if(token.type !== "RPAREN"){
+        parse_expr();
+        expect("RPAREN");
+    } else {
+        expect("RPAREN");
+    }
+}
+
+function parse_hex_function(){
+    expect("HEX");
+    expect("LPAREN");
+    parse_expr();
+    expect("RPAREN");
+}
+
+function parse_len_function(){
+    expect("LEN");
+    expect("LPAREN");
+    parse_expr();
+    expect("RPAREN");
+}
+
+function parse_oct_function(){
+    expect("OCT");
+    expect("LPAREN");
+    parse_expr();
+    expect("RPAREN");
+}
+
+function parse_ord_function(){
+    expect("ORD");
+    expect("LPAREN");
+    
+    var token = peek();
+    
+    // case totken = ID
+    switch(token.type){
+        case "QUOTE":
+            expect("QUOTE");
+            token = peek();
+            if(token.type === "QUOTE")
+                syntax_error();         // INSERT SYNTAX ERROR
+            if(token.length === 1){
+                program = program.slice(token.length);
+                expect("QUOTE");
+            }else{
+                syntax_error();          // INSERT SYNTAX ERROR
+            }
+            break;
+        case "APOSTROPHE":
+            expect("APOSTROPHE");
+            token = peek();
+            if(token.type === "APOSTROPHE"){
+                syntax_error();         // INSERT SYNTAX ERROR
+            } 
+            if(token.length === 1){
+                program = program.slice(token.length);
+                expect("APOSTROPHE");
+            }
+            break;
+        default:
+            syntax_error();             // INSERT SYNTAX ERROR
+            break;
+    }
+    expect("RPAREN");
+}
+
+function parse_str_function(){
+    expect("STR");
+    expect("LPAREN");
+    var token = peek();
+    if(token.type !== "RPAREN"){
+        parse_expr();
+        expect("RPAREN");
+    } else {
+        expect("RPAREN");
+    }
+}
+
+
+function parse_int_function(){
+    
+}
+
+function parse_max_function(){
+    
+}
+
+function parse_min_function(){
+    
+}
+
 function parse_type_function(){
     expect("TYPE");
     expect("LPAREN");
@@ -1477,7 +1666,6 @@ function parse_type_function(){
         //Type takes 1 argument (we are not covering the 3 arguments case)
         syntax_error("");
     }else{
-        //check if it's okay to just call parse_expr()
         parse_expr();
         expect("RPAREN");
     }
@@ -1504,7 +1692,10 @@ function parse_math_lib_function(){
     expect("PERIOD");
     var token = peek();
     var math_functions = ["CEIL", "FLOOR", "SQRT", "COS", "SIN", "TAN", "PI", "E"];
-    if(math_functions.includes(token.type)){
+    //TO DO
+    //Incorporate in a better manner, this should be more for testing
+    
+    if(math_functions.includes(token.type) || token.type === "ID"){
         switch(token.type){
             case "CEIL": parse_ceil_function();
                 break;
@@ -1518,9 +1709,21 @@ function parse_math_lib_function(){
                 break;
             case "TAN": parse_tan_function();
                 break;
-            case "PI": parse_pi_constant();
+            /*case "PI": parse_pi_constant();
                 break;
             case "E": parse_e_constant();
+                break;
+            */
+            case "ID":
+                if(token.id === "pi"){
+                    parse_pi_constant();
+                }else if(token.id === "e"){
+                    parse_e_constant();
+                }
+                else{
+                    //INSERT SYNTAX ERROR
+                    syntax_error();
+                }
                 break;
             //INSERT SYNTAX ERROR
             default: syntax_error("");
@@ -1598,10 +1801,16 @@ function parse_tan_function(){
     expect("RPAREN");
 }
 function parse_pi_constant(){
-    expect("PI");
+    //TO DO
+    //fix after inclusion of pi
+    //expect("PI");
+    expect("ID");
 }
 function parse_e_constant(){
-    expect("E");
+    //TO DO
+    //fix after inclusion of e
+    //expect("E");
+    expect("ID");
 }
 
 //Random Library functions
@@ -1615,9 +1824,9 @@ function parse_random_lib_function(){
         switch(token){
             case "RANDOM": parse_random_function();
                 break;
-            case "RANDINT":
+            case "RANDINT": parse_randint_function();
                 break;
-            case "SEED":
+            case "SEED": parse_seed_function();
                 break;
             //INSERT SYNTAX ERROR
             default: syntax_error("");
@@ -1636,59 +1845,93 @@ function parse_random_function(){
     expect("RPAREN");
 }
 
+function parse_seed_function(){
+    expect("SEED");
+    expect("LPAREN");
+    var token = peek();
+    
+    if(token.type !== "RPAREN"){
+        parse_expr();
+        token = peek();
+        
+        if(token.type !== "RPAREN"){//Two Arguments
+            expect("COMMA");
+            parse_expr();
+            expect("RPAREN");
+        } else {//Single Arugment
+            expect("RPAREN");
+        }
+        expect("RPAREN");
+    } else {//No Arguments
+        expect("RPAREN");
+    }
+}
+
+function parse_randint_function(){
+    expect("RANDINT");
+    expect("LPAREN");
+    parse_expr();
+    expect("COMMA");
+    parse_expr();
+    expect("RPAREN");
+}
+
 function syntax_error(errorType){
+    testingResult = false;
+    program = "";
+    //document.write("<br>" + testingResult + "<br>");
     if (errorType === "UNKNOWN_SYMBOL"){
         alert("Program contains unknown symbols!");
-        exit();
+        //exit();
     }else if (errorType === "INVALID_STATEMENT"){
         alert("Invalid statement!");
-        exit();
+        //exit();
     }else if (errorType === "INDENTATION_ERROR"){
         alert("Indentation error detected!");
-        exit();
+        //exit();
     }else if (errorType === "INVALID_COND_OPERATOR"){
         alert("Invalid conditional operator!");
-        exit();
+        //exit();
     }else if (errorType === "INVALID_COMP_OPERATOR"){
         alert("Invalid comparison operator!");
-        exit();
+        //exit();
     }else if (errorType === "INVALID_LINK"){
         alert("Invalid comparison link!");
-        exit();
+        //exit();
     }else if (errorType === "INVALID_RANGE"){
         alert("Invalid ranged specified!");
-        exit();
+        //exit();
     }else if (errorType === "INVALID_RHS"){
         alert("Invalid right-hand side value/variable");
-        exit();
+        //exit();
     }else if (errorType === "INVALID_ASSIGNMENT"){
         alert("Invalid assignment operation!");
-        exit();
+        //exit();
     }else if (errorType === "INVALID_ASSIGN_OPERATOR"){
         alert("Invalid assignment operator!");
-        exit();
+        //exit();
     }else if (errorType === "INVALID_PRIMARY"){
         alert("Invalid primary type!");
-        exit();
+        //exit();
     }else if (errorType === "NON_FORMAT_ERROR"){
         alert("Only format() allowed!");
-        exit();
+        //exit();
     }else if (errorType === "INVALID_OPERATOR"){
         alert("Invalid arithmetic operator!");
-        exit();
+        //exit();
     }else if (errorType === "ERROR_MISSING_RIGHT_PARENTHESIS"){
         alert("Expecting right parenthesis!");
-        exit();
+        //exit();
     }else if (errorType === "ERROR_FORMAT_VIOLATION"){
         alert("format() violation detected!");
-        exit();
+        //exit();
     }else if (errorType === "INVALID_INPUT"){
         alert("Invalid input!");
-        exit();
+        //exit();
     }else{
         //document.write("Unspecified Error<br>");
         alert("Unspecified Error");
-        exit();
+        //exit();
     }
     
 }
