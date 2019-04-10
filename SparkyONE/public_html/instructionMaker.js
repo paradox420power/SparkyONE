@@ -3,6 +3,7 @@ var instrList = new Array(); //global list of instructions
 var funcList = new Array(); //list of callable functions
 var varList = new Array(); //list of declared variables
 var cmdCount = 1; //this is the instruction on, (instr); or (instr)\n should increment this value
+var indentStack = []; //used to keep track of indentations throughout execution
 
 var reservedWord = ["True", "False", "None", "abs", "and", "as", "ascii", "assert", "bin", "bool", "break", "ceil", "chr", "class", "cos", 
     "continue", "def", "del", "elif", "else", "except", "float", "floor", "finally", "for", "from", "global", "hex",
@@ -161,7 +162,7 @@ function skipEmptyLines(input){
                 for(i = 0; i < token.length; i++){
                     input = " " + input;
                 }
-                //increase_indent();
+                //increase_indent(input);
             }else{
                 input = token.id + "" + input; //add spliced id back to front of program
             }
@@ -178,6 +179,7 @@ function create_instructions(input){
     //proof of concept
     var lineEnds = ["SEMICOLON", "END_OF_LINE", "END_OF_FILE"];
     var lexeme;
+    indentStack.push(0);    // if the indentStack is empty it won't work
     while(input.length > 0){
         lineTokens = []; //reset array 
         let instr_line = " ";
@@ -1051,4 +1053,116 @@ function resolve_built_ins(token)
     }
     
     return res;
+}
+
+
+
+// will check the current token and push a new indentation onto the stack
+// Meant to be called after a colon :
+// Assumed that the syntax is correct and this will be type SPACE
+function increase_indent(input){
+    var token = getToken(input, false);
+    current = indentStack.pop();
+    
+    if(current === token.length){
+        indentStack.push(current);
+    } else {
+        indentStack.push(current);
+        indentStack.push(token.length);
+    }   
+    input = input.slice(token.length);
+    return input;
+}
+
+/*
+ * will skip all lines at current and greater indentation until dedent
+ * will return input
+ * Idea: return [input, skipped] where skipped is an arraylist of lines that
+ *              skip_one_line removed
+ *              could also only be calculated if True/False passed when this function is called
+ *              if not just empty list
+ */
+function skip_indented_lines(input){
+    var token = getToken(input, false);
+    var skip_length = indentStack.pop();    // Should get latest item from indentStack
+    var current_length = token.length;
+    
+    while(skip_length < current_length){
+        input = skip_one_line(input);
+        token = getToken(input, false);
+        if(token.type === "SPACE"){
+            current_length = token.length;
+            input = input.slice(token.length);
+        } else { 
+            current_length = 0;
+        }
+    }
+    indentStack.push(skip_length);
+    check_indent(input);                    // Should handle indent stack if multiple dedents occur
+    return input;
+}
+
+function skip_one_line(input){
+    var token = getToken(input, false);
+    var multiLine = ["LPAREN", "LBRACE", "LBRACKET"];
+    
+    //this may be a problem as the end of line may be something like
+    /*
+     * t = [1   , 3, 2,
+     *          5,  6,]
+     * so I will have to figure out how to skip that when possible --> 
+     *      the indentation be shorter is the problem
+     *      Switch statement is attempt to remedy this --> could be used for multiline comments too
+     *      
+     * Another thing while researching implicit Line Continuation, apparently
+     *      \ can be used for explicit line continuation --> need to add to lexer
+     *      not currently implemented here
+     */
+    while(token.type === "END_OF_LINE"){
+        if(multiLine.includes(token.type)){
+            //is possibly a multiline item --> possibly include triple quotes?
+            switch(token.type){
+                case "LPAREN":
+                    while(token.type !== "RPAREN"){
+                        input = token.slice(token.length);
+                        token = getToken(input, false);
+                    }
+                    break;
+                case "LBRACE":
+                    while(token.type !== "RBRACE"){
+                        input = token.slice(token.length);
+                        token = getToken(input, false);
+                    }
+                    break;
+                    
+                case "LBRACKET":
+                    while(token.type !== "RBRACKET"){
+                        input = token.slice(token.length);
+                        token = getToken(input, false);
+                    }
+                    break;
+                default:
+                    break;
+            } // end switch
+        }// end if
+        input = token.slice(token.length);
+        token = getToken(input, false);
+    }// end while
+}
+
+function check_indents(input){
+    var token = getToken(input, false);
+    
+    if(indentStack.length !== 1){           // if indentStack.length == 1 then should be no indents
+        var current = indentStack.pop();
+        if(token.type === "SPACE"){
+            if(token.length < current[1]){
+                check_indents(input);
+            } else if(token.length === current[1]){
+                input = input.slice(token.length);
+                indentStack.push(current[1]);
+            }
+        }
+    }
+    
 }
