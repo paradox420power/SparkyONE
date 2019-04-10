@@ -8,10 +8,11 @@ var indent_stack = [];
 var insideDef = 0;
 //USED FOR TESTING WHETHER OR NOT THE PARSER RESULTED IN A SYNTAX_ERROR
 var testingResult = true;
+var errorResult = "";
 
 function test(input){
     parse_begin_program(input);
-    return testingResult;
+    return [testingResult, errorResult];
 }
 
 //print parsing error
@@ -198,7 +199,7 @@ function parse_import_list(){
     }
     var spaceCount = saveSpaces(); //need to be held on to for indent stack purposes
     token = peek();
-    returnHeldSpaces(spaceCount); //now that we've peeked the next token we reutnr the spaces
+    returnHeldSpaces(spaceCount); //now that we've peeked the next token we return the spaces
     if(token.type === "IMPORT" || token.type === "FROM"){
         parse_import_list();
     }
@@ -316,7 +317,7 @@ function parse_function_full(){
     if(token.type === "SPACE"){
         if(indent_stack[indent_stack.length-1] < token.length){
             increase_indent();
-            parse_body();
+            parse_stmt_list();
         }else{
             //INSERT SYNTAX ERROR, actually an indentation error
             syntax_error("");
@@ -401,7 +402,6 @@ function parse_stmt_list(){
     }
     //var stmt_Starts = ["IF", "FOR", "WHILE", "ID", "RETURN", "HASH_TAG"];
     var spaceCount = saveSpaces(); //need to be held on to for indent stack purposes
-    
     token = peek();
     returnHeldSpaces(spaceCount); //now that we've peeked the next token we return the spaces
     
@@ -416,49 +416,55 @@ function parse_stmt_list(){
 }
 
 function parse_stmt(){
-    check_indents();
+    var spaceCount = saveSpaces();
     var token = peek();
-    if(bgnTokens.includes(token.type)){
-        switch(token.type){
-            case "IF": parse_if_stmt();
-                break;
-            case "FOR": parse_for_stmt();
-                break;
-            case "WHILE": parse_while_stmt();
-                break;
-            case "ID": parse_assign_stmt();
-                break;
-            //TO DO
-            //Account for multiline comments
-            case "HASH_TAG": parse_comment();
-                break;
-            case "DEF": parse_function_full();
-                break;
-            case "RETURN": 
-                //TO DO
-                //USED FOR TESTING FUTURE IMPLEMENTATION
-                if(insideDef > 0){
-                    parse_return_stmt();
-                }else{
-                    //INSERT SYNTAX ERROR
-                    //return used outside of function call
-                    syntax_error("");
-                }
-                break;
-            default: syntax_error("INVALID_STATEMENT");
-                break;
-        }
-    }else{//This is for when an expression is used outside of assigning it to a variable
-        if(["PLUS", "MINUS", "INCREMENT", "DECREMENT"].includes(token.type)){
-            expect(token.type);
-            token = peek();
-            while(["PLUS", "MINUS", "INCREMENT", "DECREMENT"].includes(token.type)){
+    //TO DO
+    //Account for multiline comments
+    if(token.type === "HASH_TAG"){
+        parse_comment();
+        //document.write("<br>" + program + "<br>The fuck:<br" + program +"><br>")
+    }else{
+        returnHeldSpaces(spaceCount);
+        check_indents();
+        var token = peek();
+        if(bgnTokens.includes(token.type)){
+            switch(token.type){
+                case "IF": parse_if_stmt();
+                    break;
+                case "FOR": parse_for_stmt();
+                    break;
+                case "WHILE": parse_while_stmt();
+                    break;
+                case "ID": parse_assign_stmt();
+                    break;
+                case "DEF": parse_function_full();
+                    break;
+                case "RETURN": 
+                    //TO DO
+                    //USED FOR TESTING FUTURE IMPLEMENTATION
+                    if(insideDef > 0){
+                        parse_return_stmt();
+                    }else{
+                        //INSERT SYNTAX ERROR
+                        //return used outside of function call
+                        syntax_error("");
+                    }
+                    break;
+                default: syntax_error("INVALID_STATEMENT");
+                    break;
+            }
+        }else{//This is for when an expression is used outside of assigning it to a variable
+            if(["PLUS", "MINUS", "INCREMENT", "DECREMENT"].includes(token.type)){
                 expect(token.type);
                 token = peek();
+                while(["PLUS", "MINUS", "INCREMENT", "DECREMENT"].includes(token.type)){
+                    expect(token.type);
+                    token = peek();
+                }
+                parse_expr();
+            }else{
+                parse_expr();
             }
-            parse_expr();
-        }else{
-            parse_expr();
         }
     }
 }
@@ -1646,15 +1652,51 @@ function parse_str_function(){
 
 
 function parse_int_function(){
+    expect("INT");
+    expect("LPAREN");
+    var token = peek();
     
+    if(token.type !== "RPAREN"){
+        parse_expr();
+        token = peek();
+        if(token.type === "COMMA"){
+            expect("COMMA");
+            parse_expr();
+        }
+    }
+    expect("RPAREN");
 }
 
 function parse_max_function(){
+    expect("MAX");
+    expect("LPAREN");
+    parse_expr();
+    expect("COMMA");
+    parse_expr();
+    var token = peek();
     
+    while(token.type !== "RPAREN" && token.type !== "END_OF_FILE"){
+        expect("COMMA");
+        parse_expr();
+        token = peek();
+    }
+    expect("RPAREN");
 }
 
 function parse_min_function(){
+    expect("MIN");
+    expect("LPAREN");
+    parse_expr();
+    expect("COMMA");
+    parse_expr();
+    var token = peek();
     
+    while(token.type !== "RPAREN" && token.type !== "END_OF_FILE"){
+        expect("COMMA");
+        parse_expr();
+        token = peek();
+    }
+    expect("RPAREN");
 }
 
 function parse_type_function(){
@@ -1881,56 +1923,56 @@ function syntax_error(errorType){
     program = "";
     //document.write("<br>" + testingResult + "<br>");
     if (errorType === "UNKNOWN_SYMBOL"){
-        alert("Program contains unknown symbols!");
+        errorResult = "Program contains unknown symbols!";
         //exit();
     }else if (errorType === "INVALID_STATEMENT"){
-        alert("Invalid statement!");
+        errorResult = "Invalid statement!";
         //exit();
     }else if (errorType === "INDENTATION_ERROR"){
-        alert("Indentation error detected!");
+        errorResult = "Indentation error detected!";
         //exit();
     }else if (errorType === "INVALID_COND_OPERATOR"){
-        alert("Invalid conditional operator!");
+        errorResult = "Invalid conditional operator!";
         //exit();
     }else if (errorType === "INVALID_COMP_OPERATOR"){
-        alert("Invalid comparison operator!");
+        errorResult = "Invalid comparison operator!";
         //exit();
     }else if (errorType === "INVALID_LINK"){
-        alert("Invalid comparison link!");
+        errorResult = "Invalid comparison link!";
         //exit();
     }else if (errorType === "INVALID_RANGE"){
-        alert("Invalid ranged specified!");
+        errorResult = "Invalid ranged specified!";
         //exit();
     }else if (errorType === "INVALID_RHS"){
-        alert("Invalid right-hand side value/variable");
+        errorResult = "Invalid right-hand side value/variable";
         //exit();
     }else if (errorType === "INVALID_ASSIGNMENT"){
-        alert("Invalid assignment operation!");
+        errorResult = "Invalid assignment operation!";
         //exit();
     }else if (errorType === "INVALID_ASSIGN_OPERATOR"){
-        alert("Invalid assignment operator!");
+        errorResult = "Invalid assignment operator!";
         //exit();
     }else if (errorType === "INVALID_PRIMARY"){
-        alert("Invalid primary type!");
+        errorResult = "Invalid primary type!";
         //exit();
     }else if (errorType === "NON_FORMAT_ERROR"){
-        alert("Only format() allowed!");
+        errorResult = "Only format() allowed!";
         //exit();
     }else if (errorType === "INVALID_OPERATOR"){
-        alert("Invalid arithmetic operator!");
+        errorResult = "Invalid arithmetic operator!";
         //exit();
     }else if (errorType === "ERROR_MISSING_RIGHT_PARENTHESIS"){
-        alert("Expecting right parenthesis!");
+        errorResult = "Expecting right parenthesis!";
         //exit();
     }else if (errorType === "ERROR_FORMAT_VIOLATION"){
-        alert("format() violation detected!");
+        errorResult = "format() violation detected!";
         //exit();
     }else if (errorType === "INVALID_INPUT"){
-        alert("Invalid input!");
+        errorResult = "Invalid input!";
         //exit();
     }else{
         //document.write("Unspecified Error<br>");
-        alert("Unspecified Error");
+        errorResult = "Unspecified Error";
         //exit();
     }
     
