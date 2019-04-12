@@ -711,7 +711,7 @@ function getToken(input, updateLastToken){
     var operators = ["PLUS", "ADD_ASSIGN", "MINUS", "SUB_ASSIGN", "MULT", "MULT_ASSIGN", "EXPONENTIAL",
                     "DIV", "DIV_ASSIGN", "MOD", "MOD_ASSIGN", "GREATER_THAN", "GREATER_THAN_EQUAL",
                     "LESS_THAN", "LESS_THAN_EQUAL", "NOT_EQUAL", "COMPARE_EQUALS", "ASSIGN_EQUALS",
-                    "LPAREN", "LBRACE", "LBRACKET", "START_OF_LINE"]; //these might be followed by a number prefaced by + or -
+                    "LPAREN", "LBRACE", "LBRACKET", "START_OF_LINE", "END_OF_LINE"]; //these might be followed by a number prefaced by + or -
     var mathIndicators = ["NUMBER", "FLOAT", "BINARY", "OCTAL", "HEX"]; //a + or - prefaced by this should be careful
     var numbers = /^[0-9]+$/;
     if(input !== null || input !== ""){
@@ -931,8 +931,10 @@ function getToken(input, updateLastToken){
                 lexeme.type = "END_OF_LINE";
                 lexeme.length++;
                 lexeme.charStart = lexeme.charEnd = currentLineCharIndex;
-                code_line++;
-                currentLineCharIndex = 0;
+                if(updateLastToken){
+                    code_line++;
+                    currentLineCharIndex = 0;
+                }
                 break;
             case "#":
                 lexeme.id = "#";
@@ -1009,11 +1011,4 @@ function getToken(input, updateLastToken){
 
 function ungetToken(input, token){
     return token.id + " " + input;
-}
-
-function incrementCodeLine(){
-    code_line++;
-}
-function decrementCodeLine(){
-    code_line--;
 }

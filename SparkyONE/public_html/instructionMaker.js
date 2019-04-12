@@ -111,37 +111,6 @@ function updateVarType(index, newVarType){
     varList[index].type = newVarType;
 }
 
-//priority queue operations
-//finds the index of the largest priority operation & returns that index
-function priorityPop(queue){
-    var index = -1;
-    var priority = -1;
-    for(var x = 0; x < queue.length; x++){
-        if(queue[x].priority > priority){
-            index = x;
-            priority = queue[x].priority;
-        }
-    }
-    return index;
-}
-
-//takes an index (typically the one from priority pop), a queue, and a token resolution
-//it will go to the token left of the passed index & update the various fields of that token to match the passed one
-//and then it removes the index & index+1 token. Efefctively replacing the operated tokens with their resolution
-function resolveQueue(index, queue, resolution, prefixLength, suffixLength){
-    
-    queue[index].token.id = resolution.result; //update value in the queue
-    queue[index].token.type = resolution.type; // update type
-    queue[index].priority = -1; //after any operation it should not be replaced with another operation
-    
-    if(index + suffixLength < queue.length) //don' slice off what isn't there
-        queue.splice(index + 1, suffixLength); //go to next token & slice off the related tokens to the operation
-   
-    if(index - prefixLength > -1) //don't slice off what isn't there
-        queue.splice(index - prefixLength, prefixLength); //slice off preceding tokens related to the operation
-    
-}
-
 var lineTokens = new Array(); //honestly, fuck the fact array.push() adds a pointer so updates to that data type are retroactive the array
 function appendTokenList(item){ //because lexeme is dynamically updated in a list
     var temp = item;
@@ -193,11 +162,16 @@ function create_instructions(input){
             case "FLOAT":
             case "STRING":
             case "ID": //some assign statement or function call
-                while(!lineEnds.includes(lexeme.type)){
+                let openParenCount = 0;
+                while(!lineEnds.includes(lexeme.type) || openParenCount !== 0){ //a line can be "a = ( 6 + \n 6) a still be treated as a single instruction
                     lexeme = getToken(input, true);
                     if(!lineEnds.includes(lexeme.type)){ //don't push a line end token to the list getting resolved, but it will be sliced
                         instr_line += lexeme.id + " ";
                         appendTokenList(lexeme);
+                        if(lexeme.type === "LPAREN")
+                            openParenCount++;
+                        if(lexeme.type === "RPAREN")
+                            openParenCount--;
                     }
                     input = input.slice(lexeme.length);
                 }
@@ -240,13 +214,7 @@ function create_instructions(input){
     return instrList;
 }
 
-/*
- This will convert the passed tokens into a priority queue of atomic operations. It will then iterate
-through the operations and resolve them 1 at a time, pushing them to the instruction queue that gets returned
-until there is only 1 token left to resolve. This method does not push the instructions, but calls methods that
-push the appropriate syntax for operations. While it's called assign it can also handle standalone ops, like 3+3 or 4 == 5
- */
-function order_assign_statement(passedTokens){
+function createInstrQueue(passedTokens){
     var priorityMod = 0; //used to scope priority of () operations
     var instrQueue = new Array();
     var tempToken;
@@ -257,6 +225,18 @@ function order_assign_statement(passedTokens){
             tempToken = passedTokens[x];
             dontQueue = false;
             switch(passedTokens[x].type){//used to assign priority
+                case "IF":
+                case "ELIF":
+                case "ELSE":
+                case "WHILE":
+                case "ADD_ASSIGN":
+                case "SUB_ASSIGN":
+                case "MULT_ASSIGN":
+                case "DIV_ASSIGN":
+                case "MOD_ASSIGN":
+                case "ASSIGN_EQUALS": tempPriority = 0 + priorityMod;
+                    priorityMod++; //assigns need to be read right to left, so we increment priority mod for each type assign
+                    break;
                 case "AND":
                 case "OR": tempPriority = 1 + priorityMod;
                     break;
@@ -278,14 +258,6 @@ function order_assign_statement(passedTokens){
                 case "MOD":
                 case "EXPONENTIAL": tempPriority = 6 + priorityMod;
                     break;
-                case "ADD_ASSIGN":
-                case "SUB_ASSIGN":
-                case "MULT_ASSIGN":
-                case "DIV_ASSIGN":
-                case "MOD_ASSIGN":
-                case "ASSIGN_EQUALS": tempPriority = 0 + priorityMod;
-                    priorityMod++; //assigns need to be read right to left, so we increment priority mod for each type assign
-                    break;
                 case "LPAREN": priorityMod += 10; //all parenthised operations need to be executed before a higher priority external instr.
                     dontQueue = true; //don't push Parens to the Queue
                     break;
@@ -294,6 +266,7 @@ function order_assign_statement(passedTokens){
                     break;
                 case "COMMA": dontQueue = true; //function will have commas, but we dont really care, ex. max(1,2,3)
                     break;
+                case "COLON": //this should be passed, but it does'nt need to be queued
                 case "SEMICOLON": //these shouldn't be passed at all, but we want to really avoid treating them as instr. by this point
                 case "END_OF_LINE":
                 case "END_OF_FILE": dontQueue = true;
@@ -312,19 +285,46 @@ function order_assign_statement(passedTokens){
             }
         }
     }
+    return instrQueue;
+}
+
+//priority queue operations
+//finds the index of the largest priority operation & returns that index
+function priorityPop(queue){
+    var index = -1;
+    var priority = -1;
+    for(var x = 0; x < queue.length; x++){
+        if(queue[x].priority > priority){
+            index = x;
+            priority = queue[x].priority;
+        }
+    }
+    return index;
+}
+
+//takes an index (typically the one from priority pop), a queue, and a token resolution
+//it will go to the token left of the passed index & update the various fields of that token to match the passed one
+//and then it removes the index & index+1 token. Efefctively replacing the operated tokens with their resolution
+function resolveQueue(index, queue, resolution, prefixLength, suffixLength){
     
-    for(var x = 0; x < instrQueue.length; x++){
-        document.getElementById("outputField").value += instrQueue[x].token.id + " ";
-    }
-    document.getElementById("outputField").value += "\n";
-    for(var x = 0; x < instrQueue.length; x++){
-        document.getElementById("outputField").value += instrQueue[x].priority.toString() + " ";
-    }
-    document.getElementById("outputField").value += "\n";
+    queue[index].token.id = resolution.result; //update value in the queue
+    queue[index].token.type = resolution.type; // update type
+    queue[index].priority = -1; //after any operation it should not be replaced with another operation
+    
+    if(index + suffixLength < queue.length) //don' slice off what isn't there
+        queue.splice(index + 1, suffixLength); //go to next token & slice off the related tokens to the operation
+   
+    if(index - prefixLength > -1) //don't slice off what isn't there
+        queue.splice(index - prefixLength, prefixLength); //slice off preceding tokens related to the operation
+    
+}
+
+function stepThroughRawInstr(instrQueue){
+    var takeBranch = false; //used for while, if, elif
     
     var opIndex = 1;
     var currentOp;
-    //the variables being operated upon might take more than 1 token, such as abs ( -3 )
+    //the variables being operated upon might take more than 1 token, such as "abs ( -3 )"
     var val1 = [];
     var val2 = [];
     var prefixLength = 0;
@@ -432,12 +432,16 @@ function order_assign_statement(passedTokens){
                 resolution = resolveLogicalOp(val1, currentOp, val2);
                 if(currentOp.type === "NOT")
                     prefixLength = 0; //even if a valid token was in front of "not" it didn't actually perform in this operation
+            }else if(currentOp.type === "WHILE"){
+                resolution = resolve_value_True_or_False(val2);
+                takeBranch = resolution.result;
             }else{ //else it assumed to be an assignment statement
                 resolution = resolveAssign(val1, currentOp, val2);
             }
         }
         //regardless of op validity, a resolution is needed
         resolveQueue(opIndex, instrQueue, resolution, prefixLength, suffixLength); //remove these tokens & replace with ID for the resolution
+        
         
         //for debugging purposes
         for(var x = 0; x < instrQueue.length; x++){
@@ -450,119 +454,42 @@ function order_assign_statement(passedTokens){
         document.getElementById("outputField").value += "\n";
         
     }
+    
+    return takeBranch;
+}
+
+/*
+ This will convert the passed tokens into a priority queue of atomic operations. It will then iterate
+through the operations and resolve them 1 at a time, pushing them to the instruction queue that gets returned
+until there is only 1 token left to resolve. This method does not push the instructions, but calls methods that
+push the appropriate syntax for operations. While it's called assign it can also handle standalone ops, like 3+3 or 4 == 5
+ */
+function order_assign_statement(passedTokens){
+    
+    var instrQueue = createInstrQueue(passedTokens);
+        
+    stepThroughRawInstr(instrQueue);
+    
     instrQueue = []; //for added measure, there should only be 1 token in the queue but it never hurts to empty it at conclusion
 }
 
-/*function order_while_loop(passedTokens){ //not properly updated for code changes made from 3/27
-    var priorityMod = 0; //used to scope priority of operations
-    var instrQueue = new Array();
-    var tempToken;
-    var tempPriority;
-    var dontQueue = false;
-    for(var x = 0; x < passedTokens.length; x++){ //add passed tokens to instruction queue & priority
-        if(passedTokens[x].type !== "SPACE"){
-            tempToken = passedTokens[x];
-            dontQueue = false;
-            switch(passedTokens[x].type){//used to assign priority
-                case "AND":
-                case "OR":
-                case "NOT": tempPriority = 1 + priorityMod;
-                    break;
-                case "COMPARE_EQUALS": //operations can have comparators, for some reason
-                case "LESS_THAN_EQUAL":
-                case "LESS_THAN":
-                case "GREATER_THAN_EQUAL":
-                case "GREATER_THAN":
-                case "NOT_EQUAL": tempPriority = 2 + priorityMod; //compares are that last things executed in this kind of operation
-                    break;
-                case "PLUS":
-                case "MINUS": tempPriority = 3 + priorityMod;
-                    break;
-                case "MULT":
-                case "DIV": tempPriority = 4 + priorityMod;
-                    break;
-                case "MOD":
-                case "EXPONENTIAL": tempPriority = 5 + priorityMod;
-                    break;
-                case "LPAREN": priorityMod += 10; //all parenthised operations need to be executed before a higher priority external instr.
-                    dontQueue = true;
-                    break;
-                case "RPAREN": priorityMod -= 10;
-                    dontQueue = true;
-                    break;
-                case "COLON": //this should be passed, but it does'nt need to be queued
-                case "END_OF_LINE": dontQueue = true; //this shouldn't be passed to begin with, but ensure it isn't queued
-                    break;
-                default: //ID, number, boolean, While, etc.
-                    tempPriority = -1;
-                    break;
-
-            }
-            let rawInstr = { //let has scope only within if statement
-                token: tempToken,
-                priority: tempPriority
-            };
-            if(!dontQueue){
-                instrQueue.push(rawInstr);//add the instr to the queue of operations getting resolved
-            }
-        }
-    }
+function order_while_loop(passedTokens){ //not properly updated for code changes made from 3/27
+    var instrQueue = createInstrQueue(passedTokens);
+    var lineOfInsidence = instrQueue[0].token.line_no;//since the tokens are being dealt with in another method, we need to store the line they occur on
     
-    for(var x = 0; x < instrQueue.length; x++){
-        document.getElementById("outputField").value += instrQueue[x].token.id + " ";
-    }
-    document.getElementById("outputField").value += "\n";
-    for(var x = 0; x < instrQueue.length; x++){
-        document.getElementById("outputField").value += instrQueue[x].priority.toString() + " ";
-    }
-    document.getElementById("outputField").value += "\n";
+    var takeBranch = stepThroughRawInstr(instrQueue); //this method returns a boolean used to determine if we stay in the loop
     
-    var opIndex = 1;
-    var currentOp;
-    var val1;
-    var val2;
-    var resolution;
-    var mathOps = ["PLUS", "MINUS", "MULT", "DIV", "MOD"]; //list of operations that can be resolved in an assign statement before assigning
-    var compareOps = ["COMPARE_EQUALS", "LESS_THAN", "LESS_THAN_EQUAL", "GREAT_THAN", "GREATER_THAN_EQUAL", "NOT_EQUAL"];
-    var logicalOps = ["AND", "OR", "NOT"];
-    while(instrQueue.length > 2){ //while loops should boil down to "while ____" (the unfilled should be some boolean or value)
-        // get the 3 tokens operated on
-        opIndex = priorityPop(instrQueue);
-        val1 = instrQueue[opIndex-1].token;
-        currentOp = instrQueue[opIndex].token;
-        val2 = instrQueue[opIndex+1].token;
-        //resolve any preceding negatives on these values
-        if(val1.id.charAt(0) === "+" || val1.id.charAt(0) === "-"){
-            let newVal = resolvePrecedingOperators(val1); //pass token, return string to update the value
-            val1.id = newVal;
-        }
-        if(val2.id.charAt(0) === "+" || val2.id.charAt(0) === "-"){
-            let newVal = resolvePrecedingOperators(val2); //pass token, return string to update the value
-            val2.id = newVal;
-        }
-        //perform the operation
-        if(mathOps.includes(currentOp.type)){ //if the next prioritized operation is math, go to resolve Math
-            resolution = resolveMath(val1, currentOp, val2);
-        }else if(compareOps.includes(currentOp.type)){ //check if it is a comparator
-            resolution = resolveCompare(val1, currentOp, val2);
-        }else if(logicalOps.includes(currentOp.type)){
-            resolution = resolveLogicalOp(val1, currentOp, val2);
-        }//else a potential error
-        resolveQueue(opIndex, instrQueue, resolution); //remove these 3 tokens & replace with ID for the resolution
-    }
     //resolve the state of the while loop
-    val1 = instrQueue[1].token; //at this point its only "while ____";
-    var takeBranch = resolve_value_True_or_False(val1);
     if(takeBranch){
-        pushInstr("The While loop evaluated to True, take the path", "" , cmdCount, val1.line_no, 0);
-        //read & store nested instructions
+        pushInstr("The While loop evaluated to True, take the path", "" , cmdCount, lineOfInsidence, 0);
+        //read & store nested instructions for operation
     }else{
-        pushInstr("The While loop evaluated to False, don't take the path", "" , cmdCount, val1.line_no, 0);
+        pushInstr("The While loop evaluated to False, don't take the path", "" , cmdCount, lineOfInsidence, 0);
         //skip nested instructions
     }
     //check conditional & possibly loop again
     
-}*/
+}
 
 function resolvePrecedingOperators(resolveToken){ //step by step resolution of "++--+#"
     var resolved;
@@ -806,7 +733,18 @@ function resolveMath(val1, op, val2){
             resolved = num1 % num2;
             break;
     }
-    instr = num1 + " " + op.id + " " + num2;
+    instr = "";
+    if(tokenVal1.type !== "TRUE" && tokenVal1.type !== "FALSE" && tokenVal1.type !== "NONE"){
+        instr += num1 + " ";
+    }else{
+        instr += tokenVal1.type + " ";
+    }
+    instr += op.id + " ";
+    if(tokenVal2.type !== "TRUE" && tokenVal2.type !== "FALSE" && tokenVal2.type !== "NONE"){
+        instr += num2 + " ";
+    }else{
+        instr += tokenVal2.type + " ";
+    }
     //push the math operation performed
     pushInstr("Operation " + instr, " is resolved to " + resolved, cmdCount, lineN, 0);
     var resultType = getResultType(tokenVal1, op, tokenVal2); //check result type & if passed types are comapatible with that operation
@@ -996,6 +934,10 @@ function resolveAssign(val1, op, val2){
             resolved = intermediateRes.result + " assigned to variable \"" + val1[0].id + "\"";
             break;
     }
+    if(newVarType === "TRUE" || newVarType === "FALSE" || newVarType === "NONE"){
+        instr = val1[0].id + " = " + newVarType;
+        resolved = newVarType + " assigned to variable \"" + val1[0].id + "\"";
+    }
     if(val1[0].type === "ID"){ //update the variable that had a nmuber assigned to it
         index = varIsDeclared(val1[0].id);
         if(index === -1){//new variable
@@ -1017,11 +959,14 @@ function resolveAssign(val1, op, val2){
 
 //called on conditionals, such as if, elif, or while
 function resolve_value_True_or_False(passedVal){
-    var tokenValue = convertTokenToValue(passedVal).value;
-    var isTrue = true;
-    if(tokenValue === 0)
-        isTrue = false;
-    return isTrue;
+    var convertToken = convertTokenToValue(passedVal);
+    
+    var resolution = {
+        result: convertToken.value + "",
+        type: convertToken.type
+    };
+    
+    return resolution;
 }
 
 

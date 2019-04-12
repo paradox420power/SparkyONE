@@ -1,7 +1,10 @@
 //added INPUT in bgnTokens for testing purposes for now
-var bgnTokens = ["IMPORT", "IF", "FOR", "WHILE", "ID", "PRINT", "INPUT", "HASH_TAG"];
+var bgnTokens = ["IMPORT", "FROM", "IF", "FOR", "WHILE", "ID", "HASH_TAG", "RETURN", "DEF"];
+var libFunctions = ["INPUT", "PRINT", "CEIL", "FLOOR", "SQRT", "COS", "SIN", "TAN", "PI", "E", "RANDOM", "SEED", "RANDINT"];
 var program = "";
 var indent_stack = [];
+//USED FOR TESTING FUTURE IMPLEMENTATION
+var insideDef = 0;
 
 //print parsing error
 function error_expected_not_matching(expected, received, line_no){
@@ -13,7 +16,7 @@ function skipSpaces(){
     var token = getToken(program, false);
     if(token.type === "SPACE"){
         program = program.slice(token.length);
-        //token = getToken(program);
+        //token = getToken(program, false);
         //document.write("Next Token: " + token.id + "<br>");
     }
     //else do nothing
@@ -24,21 +27,21 @@ function check_indents(){
     var token = getToken(program, false);
     if(indent_stack.length !== 1){
         var current = indent_stack.pop();
-        if(token.length > current){
+        if(token.length > current[1]){
             //unexpected indent
             indent_stack = [];
             indent_stack.push(0);
             //document.write("index syntax error at line " + token.line_no + "<br>Current: " + current + " TabLength: " + token.length + "<br>");
             syntax_error("INDENTATION_ERROR");
-        }else if(token.length < current){
-            //posible dedent
+        }else if(token.length < current[1]){
+            //possible dedent
             //document.write("Popping: " + current + "<br>");
             //document.write(indent_stack.toString() + "<br>");
             check_indents();
-        }else if(token.length === current){
+        }else if(token.length === current[1]){
             //matching indent
             program = program.slice(token.length);
-            indent_stack.push(current);
+            indent_stack.push(current[1]);
         }
     }else{
         if(token.type === "SPACE"){
@@ -108,7 +111,7 @@ function expect(tokenType){
             //check correct indents (stack issue)
             //check_indents();
         }
-        document.write(token.type + " " + token.id +  " read at line " + token.line_no + "<br>"); //comment this out when not trouble shooting
+        //document.write(token.type + " read at line " + token.line_no + "<br>"); //comment this out when not trouble shooting
     }else{
         program = program.slice(token.length); //unnecessary to slice since an error is thrown
         error_expected_not_matching(tokenType, token.type, token.line_no);
@@ -132,7 +135,7 @@ function readEmptyLines(){
                     program = " " + program;
                 }
                 //increase_indent();
-            }else{
+            }else{//TO DO: This never ends up being called...why is it here?
                 program = token.id + "" + program; //add spliced id back to front of program
             }
         }
@@ -144,85 +147,229 @@ function readEmptyLines(){
 }
 
 function parse_begin_program(input){
-    
-    //TEST
-    /*alert("THIS IS AN ALERT");
-    exit();*/
-    
     program = input;
     indent_stack.push(0);
     var token = peek();
     if(token.type === "END_OF_LINE")
         expect("END_OF_LINE"); //this will precede to read all empty lines
+    
     token = peek();
-    if(bgnTokens.includes(token.type)){
-        //TO DO
-        //address the unnecessary if statement below as it should just be included in parse_program
-        if(token.type === "IMPORT")
-            parse_import_list();
-        var token = peek(); //if above if doesn't run this just peeks the same token
+    if(token.type === "IMPORT" || token.type === "FROM"){
+        parse_import_list();
+        token = peek(); //if above it doesn't run this just peeks the same token
         if(token.type !== "END_OF_FILE")
             parse_program(); //this will run on any non-empty program
         expect("END_OF_FILE");
     }else if(token.type === "END_OF_FILE"){
         //nothing to parse
-    }else{
+    }else if(token.type === "unchecked symbol"){
         syntax_error("UNKNOWN_SYMBOL");
+    }else{
+        parse_program();
+        expect("END_OF_FILE");
     }
     
 }
 
-//TO DO
-//Update other functions to include import as a possibility
-//See if this function is even truly necessary, as it does not seem to be
 function parse_import_list(){
     parse_import_stmt();
     var token = peek();
-    if(token.type === "IMPORT"){
+    if(token.type !== "END_OF_FILE"){//some statements are the end of the program & won't have a line break
+        if(token.type === "END_OF_LINE"){
+            expect("END_OF_LINE");
+        }else if(token.type === "SEMICOLON"){
+            expect("SEMICOLON");
+            token = peek(); //sometimes a semicolon is followed by a line break
+            if(token.type === "END_OF_LINE")
+                expect("END_OF_LINE");
+        }else{
+            //TO DO
+            //INSERT SYNTAX ERROR
+            syntax_error("");
+        }
+    }
+    var spaceCount = saveSpaces(); //need to be held on to for indent stack purposes
+    token = peek();
+    returnHeldSpaces(spaceCount); //now that we've peeked the next token we reutnr the spaces
+    if(token.type === "IMPORT" || token.type === "FROM"){
         parse_import_list();
     }
 }
 
-//TO DO
-//Update other functions to include import as a possibility
-//Also update this function as some of it may be unnecessary given parse_stmt_list has changed overtime
 function parse_import_stmt(){
-    expect("IMPORT");
-    expect("ID");
     var token = peek();
-    //TO DO cont.
-    //I believe the below if statement is a portion that can be safely deleted.
-    if(token.type !== "END_OF_FILE"){ //some statements are the end of the program & won't have a line break
-        if(token.type === "END_OF_LINE"){
-            expect("END_OF_LINE");
-        }else{
-            expect("SEMICOLON"); //this will throw error if invalid follow-up read
-            token = peek(); //sometimes a semicolon is followed by a line break
-            if(token.type === "END_OF_LINE"){
-                expect("END_OF_LINE");
+    var availableLibs = ["MATH", "RANDOM"];
+    var libContents = { 
+        MATH: ["CEIL", "FLOOR", "SQRT", "COS", "SIN", "TAN", "PI", "E"], 
+        RANDOM: ["RANDOM", "SEED", "RANDINT"]
+    };
+    
+    if(token.type === "IMPORT"){
+        expect("IMPORT");
+        token = peek();
+        if(availableLibs.includes(token.type)){
+            expect(token.type);
+            token = peek();
+            while(token.type === "COMMA"){
+                expect("COMMA");
+                token = peek();
+                if(availableLibs.includes(token.type)){
+                    expect(token.type);
+                    token = peek();
+                }else{
+                    //INSERT SYNTAX ERROR
+                    //More likely to just be a library we don't support
+                    syntax_error("");
+                }
             }
+        }else{
+            //INSERT SYNTAX ERROR
+            //More likely to just be a library we don't support
+            syntax_error("");
+        }
+    }else if(token.type === "FROM"){ //from module_name import...
+        expect("FROM");
+        token = peek();
+        if(availableLibs.includes(token.type)){
+            expect(token.type);
+            expect("IMPORT");
+            var token2 = peek();
+            if(libContents[token.type].includes(token2.type)){
+                expect(token2.type);
+                token2 = peek();
+                if(token2.type === "COMMA"){
+                    while(token2.type === "COMMA"){
+                        expect("COMMA");
+                        token2 = peek();
+                        if(libContents[token.type].includes(token2.type)){
+                            expect(token2.type);
+                            token2 = peek();
+                        }else{
+                            //INSERT SYNTAX ERROR
+                            syntax_error("");
+                        }
+                    }
+                }
+            }else if(token2.type === "LPAREN"){
+                expect("LPAREN");
+                token2 = peek();
+                if(libContents[token.type].includes(token2.type)){
+                    expect(token2.type);
+                    token2 = peek();
+                    while(token2.type !== "RPAREN"){
+                        expect("COMMA");
+                        token2 = peek();
+                        if(libContents[token.type].includes(token2.type)){
+                            expect(token2.type);
+                            token2 = peek();
+                        }else if(token2.type === "RPAREN"){
+                            break;
+                        }else{
+                            //INSERT SYNTAX ERROR
+                            syntax_error("");
+                        }
+                    }
+                    expect("RPAREN");
+                }
+            }else if(token2.type === "MULT"){ //MULT is the token for the '*' operator, it's used for the following case: from module_name import *
+                expect("MULT");
+            }else{
+                //INSERT SYNTAX ERROR
+                syntax_error("");
+            }
+        }else{
+            //INSERT SYNTAX ERROR
+            //More likely to just be a library we don't support.
+            syntax_error("");
         }
     }
 }
 
 function parse_program(){
     var token = peek();
-    if(bgnTokens.includes(token.type)){
-        if(token.type === "DEF"){
-            parse_function_full(); //won't actully be implemented
-        }else{
-            parse_stmt_list();
-        }
+    if(token.type === "unchecked symbol"){
+        syntax_error("UNKNOWN_SYMBOL");
+    }else{
+        parse_stmt_list();
         token = peek();
         if(token.type !== "END_OF_FILE")
-            parse_program();
-    }else{
-        syntax_error("UNKNOWN_SYMBOL");
+            //parse_program();
+            syntax_error("");
     }
 }
 
+//TO DO
+//Does not cover nested function declarations
 function parse_function_full(){
-    //we aren't handling function calls
+    parse_function_def();
+    var token = getToken(program, false);
+    //After the definition of the function there should be an indent for the body of the function
+    if(token.type === "SPACE"){
+        if(indent_stack[indent_stack.length-1] < token.length){
+            increase_indent();
+            parse_body();
+        }else{
+            //INSERT SYNTAX ERROR, actually an indentation error
+            syntax_error("");
+        }
+    }else{
+        syntax_error("");
+    }
+    
+}
+
+function parse_function_def(){
+    expect("DEF");
+    expect("ID"); //should this ID then be added to reservedWords?
+    expect("LPAREN");
+    var token = peek();
+    if(token.type !== "RPAREN"){
+        parse_parameter_list();
+    }
+    expect("RPAREN");
+    expect("COLON");
+    expect("END_OF_LINE");
+}
+
+function parse_parameter_list(){
+    expect("ID");
+    var token = peek();
+    if(token.type === "COMMA"){
+        expect("COMMA");
+        token = peek();
+        if(token.type !== "RPAREN"){
+            parse_parameter_list();
+        }
+    }
+}
+
+function parse_body(){
+    //TO DO
+    //Just make into stmt_list?
+    //When the first RETURN is received go back to function full 
+    //Read the return_stmt
+    //continue reading until a dedent is noticed as syntax apparently doesn't matter after that if it's in the same scope...
+    var token = peek();
+    if(token.type === "RETURN"){
+        parse_return_stmt();
+    }
+}
+
+/*function parse_new_body(){
+    
+}
+function parse_body_no_indent(){
+    
+}*/
+
+function parse_return_stmt(){
+    expect("RETURN");
+    var token = peek();
+    if(token.type === "END_OF_LINE" || token.type === "SEMICOLON" || "END_OF_FILE"){
+        //do nothing, return to parse_body which will cover the expectation of one these tokens
+    }else{
+        parse_expr();
+    }
 }
 
 function parse_stmt_list(){
@@ -236,13 +383,24 @@ function parse_stmt_list(){
             token = peek(); //sometimes a semicolon is followed by a line break
             if(token.type === "END_OF_LINE")
                 expect("END_OF_LINE");
+        }else{
+            //TO DO
+            //INSERT SYNTAX ERROR
+            syntax_error("");
         }
     }
-    var stmt_Starts = ["IF", "FOR" , "WHILE", "ID", "PRINT", "INPUT", "IMPORT", "HASH_TAG"];
+    //var stmt_Starts = ["IF", "FOR", "WHILE", "ID", "RETURN", "HASH_TAG"];
     var spaceCount = saveSpaces(); //need to be held on to for indent stack purposes
+    
     token = peek();
-    returnHeldSpaces(spaceCount); //now that we've peeked the next token we reutnr the spaces
-    if(stmt_Starts.includes(token.type)){ //this stmt is followed by a statement
+    returnHeldSpaces(spaceCount); //now that we've peeked the next token we return the spaces
+    
+    if(token.type === "END_OF_FILE"){
+        //do nothing, and return to parse_program to expect the token
+    }else if(token.type === "DEF" && insideDef > 1){
+        alert("Nested Function Declaration is Not Supported at This Time");
+        exit();
+    }else{
         parse_stmt_list();
     }
 }
@@ -260,20 +418,36 @@ function parse_stmt(){
                 break;
             case "ID": parse_assign_stmt();
                 break;
-            case "PRINT": parse_print_stmt();
-                break;
             //TO DO
-            //Not useful, but still syntactically possible.
-            //Reads a line from input, but wouldn't set it to anything.
-            case "INPUT": parse_input_stmt();
-                break;
-            //TO DO
-            //add comment_stmt check
-            //add import_stmt check
+            //Account for multiline comments
             case "HASH_TAG": parse_comment();
+                break;
+            case "DEF": parse_function_full();
+                break;
+            case "RETURN": 
+                //USED FOR TESTING FUTURE IMPLEMENTATION
+                if(insideDef > 0){
+                    parse_return_stmt();
+                }else{
+                    //INSERT SYNTAX ERROR
+                    //return used outside of function call
+                    syntax_error("");
+                }
                 break;
             default: syntax_error("INVALID_STATEMENT");
                 break;
+        }
+    }else{//This is for when an expression is used outside of assigning it to a variable
+        if(["PLUS", "MINUS", "INCREMENT", "DECREMENT"].includes(token.type)){
+            expect(token.type);
+            token = peek();
+            while(["PLUS", "MINUS", "INCREMENT", "DECREMENT"].includes(token.type)){
+                expect(token.type);
+                token = peek();
+            }
+            parse_expr();
+        }else{
+            parse_expr();
         }
     }
 }
@@ -467,8 +641,16 @@ function parse_assign_stmt(){
                 }
             }
         }else{
+            if(["PLUS", "MINUS", "INCREMENT", "DECREMENT"].includes(token.type)){
+                expect(token.type);
+                token = peek();
+                while(["PLUS", "MINUS", "INCREMENT", "DECREMENT"].includes(token.type)){
+                    expect(token.type);
+                    token = peek();
+                }
+            }
             //TO DO
-            //Consider consolidating tuples and list parsing into just parse_expr now that it includes them.
+            //Probably get rid of the switch case altogether and just call parse_expr?
             switch(token.type){
                 case "LPAREN":
                 case "LBRACE":
@@ -478,6 +660,21 @@ function parse_assign_stmt(){
                 case "FALSE":
                 case "APOSTROPHE":
                 case "QUOTE": 
+                case "NONE":
+                case "INPUT":
+                case "PRINT":
+                case "MATH":
+                case "CEIL":
+                case "FLOOR":
+                case "SQRT": 
+                case "COS": 
+                case "SIN": 
+                case "TAN": 
+                case "PI": 
+                case "E": 
+                case "RANDOM":
+                case "RANDINT":
+                case "SEED":
                     parse_expr();
                     token = peek();
                     while(token.type === "COMMA"){//Used for potential tuple creation
@@ -529,8 +726,6 @@ function parse_multi_val_assign_stmt(){ //a,b,c,d = 1,2,3,4
         token = peek();
         var applicable = ["FLOAT","NUMBER","ID", "TRUE", "FALSE", "LPAREN", "LBRACKET", "LBRACE", "APOSTROPHE", "QUOTE"];  
         if(applicable.includes(token.type)){
-            //TO DO
-            //
             parse_expr();
         }else{
             syntax_error("INVALID_ASSIGNMENT");
@@ -581,7 +776,7 @@ function parse_assign_op(){
 
 function parse_primary(){
     var token = peek();
-    var primaries = ["ID", "NUMBER", "FLOAT", "TRUE", "FALSE", "QUOTE", "APOSTROPHE"];
+    var primaries = ["ID", "NUMBER", "FLOAT", "TRUE", "FALSE", "QUOTE", "APOSTROPHE", "NONE"];
     if(primaries.includes(token.type)){
         switch(token.type){
             case "ID": expect("ID");
@@ -596,6 +791,8 @@ function parse_primary(){
                 break;
             case "APOSTROPHE":
             case "QUOTE": parse_string();
+                break;
+            case "NONE": expect("NONE");
                 break;
             default: syntax_error("INVALID_PRIMARY");
                 break;
@@ -629,15 +826,6 @@ function parse_string(){
         expect("APOSTROPHE");
     }
 }
-
-/*function parse_valid_printables(){
-    var token = peek();
-    while(token.type !== "QUOTE"){
-        //document.write(token.type + "<br><br>");
-        expect(token.type);
-        token = peek();
-    }
-}*/
 
 //TO DO
 //Create for list declaration 
@@ -713,6 +901,23 @@ function parse_tuple_content(){
     if(token.type === "LPAREN"){
         parse_tuple();
         token = peek();
+        //There could be an operator/expression that occurs after the use of parenthesis 
+        var multi_operations = ["PLUS", "MINUS", "INCREMENT", "DECREMENT"];
+        var operations = ["MULT", "DIV", "MOD", "EXPONENTIAL", "IN", "NOTIN", "IS", "ISNOT"];
+        
+        //Handles instances of operators that can appear in succession such as ++--+-+-+-+5
+        if(multi_operations.includes(token.type)){
+            while(multi_operations.includes(token.type)){
+                expect(token.type);
+                token = peek();
+            }
+            parse_expr();
+        }else if(operations.includes(token.type)){
+            parse_op();
+            parse_expr();
+        }
+        
+        token = peek();
         if(token.type === "COMMA"){
             expect("COMMA");
             token = peek();
@@ -725,6 +930,16 @@ function parse_tuple_content(){
             }
         }
     }else{
+        //There could be an operator/expression that occurs after the use of parenthesis 
+        var multi_operations = ["PLUS", "MINUS", "INCREMENT", "DECREMENT"];
+
+        //Handles instances of operators that can appear in succession such as ++--+-+-+-+5
+        if(multi_operations.includes(token.type)){
+            while(multi_operations.includes(token.type)){
+                expect(token.type);
+                token = peek();
+            }
+        }
         parse_expr();
         token = peek();
         if(token.type === "COMMA"){
@@ -738,6 +953,9 @@ function parse_tuple_content(){
                 parse_tuple_content();
             }
         }
+        //else do nothing
+        //Covers an expression being used inside parenthesis, but a tuple not being created.
+        
     }
 }
 
@@ -813,8 +1031,7 @@ function parse_expr(){
         var string_content = program;
         parse_string();
         string_content = string_content.substring(0,string_content.indexOf(program));
-        document.write(string_content + "<br>");
-        
+                
         var token2 = peek();
         if(token2.type === "PERIOD"){//Used in case of a function, in this case we only have the format function
             token2 = peek_2_ahead();
@@ -835,14 +1052,59 @@ function parse_expr(){
         //TO DO
         //Check how to distinguish between dictionary and set implementations after parse_set has been incorporated.
         parse_dictionary();
+    }else if (token.type === "MATH"){
+        parse_math_lib_function();
+    }else if (token.type === "RANDOM"){
+        parse_random_lib_function();
+    }else if(libFunctions.includes(token.type)){
+        switch(token.type){
+            case "INPUT": parse_input_stmt();
+                break;
+            case "PRINT": parse_print_stmt();
+                break;
+            case "CEIL": parse_ceil_function();
+                break;
+            case "FLOOR": parse_floor_function();
+                break;
+            case "SQRT": parse_sqrt_function();
+                break;
+            case "COS": parse_cos_function();
+                break;
+            case "SIN": parse_sin_function();
+                break;
+            case "TAN": parse_tan_function();
+                break;
+            case "PI": parse_pi_constant();
+                break;
+            case "E": parse_e_constant();
+                break;
+            case "RANDOM": parse_random_function();
+                break;
+            case "RANDINT":
+                break;
+            case "SEED":
+                break;
+            //INSERT SYNTAX ERROR
+            default: syntax_error("");
+                break;
+        }
     }else{
         parse_primary();
     }
     
     token = peek();
-    var operations = ["PLUS", "MINUS", "MULT", "DIV", "MOD", "EXPO", "IN", "NOTIN", "IS", "ISNOT"];
+    var multi_operations = ["PLUS", "MINUS", "INCREMENT", "DECREMENT"];
+    var operations = ["MULT", "DIV", "MOD", "EXPONENTIAL", "IN", "NOTIN", "IS", "ISNOT"];
     var compare_ops = ["COMPARE_EQUALS", "NOT_EQUAL", "LESS_THAN", "LESS_THAN_EQUAL", "GREATER_THAN", "GREATER_THAN_EQUAL"];
-    if(operations.includes(token.type)){
+    
+    //Handles instances of operators that can appear in succession such as ++--+-+-+-+5
+    if(multi_operations.includes(token.type)){
+        while(multi_operations.includes(token.type)){
+            expect(token.type);
+            token = peek();
+        }
+        parse_expr();
+    }else if(operations.includes(token.type)){
         parse_op();
         parse_expr();
     }else if(compare_ops.includes(token.type)){
@@ -864,7 +1126,7 @@ function parse_op(){
             break;
         case "MOD": expect("MOD");
             break;
-        case "EXPO": expect("EXPO");
+        case "EXPONENTIAL": expect("EXPONENTIAL");
             break;
         case "IN": expect("IN");
             break;
@@ -879,6 +1141,8 @@ function parse_op(){
     }
 }
 
+//TO DO
+//Account for the unclusion of functions in the list of possible tokens read
 function parse_print_stmt(){
     expect("PRINT");
     expect("LPAREN");
@@ -923,6 +1187,8 @@ function parse_print_multi_val(){
     }
 }
 
+//TO DO
+//Potentially have to account for more functionality
 function parse_format_function(){
     var token = peek();
     var token2;
@@ -1029,7 +1295,7 @@ function parse_format_function(){
         //document.write("hi<br>");
         if(string_content.includes("{") || string_content.includes("}")){
             validate_format_string(string_content, parameterCount, namedParameters);
-            document.write("hi2<br>");
+            
         }else{
             //the string has no brackets, meaning there can be no syntax issues caused by different formats
         }
@@ -1196,6 +1462,177 @@ function parse_comment(){
         expect(token.type);
         token = peek();
     }
+}
+
+//Built-in Functions
+//TO DO
+//Will we have to worry about the typing of functions, modules, etc. ?
+function parse_type_function(){
+    expect("TYPE");
+    expect("LPAREN");
+    var token = peek();
+    if(token.type === "RPAREN"){
+        //INSERT TYPE ERROR
+        //Type takes 1 argument (we are not covering the 3 arguments case)
+        syntax_error("");
+    }else{
+        //check if it's okay to just call parse_expr()
+        parse_expr();
+        expect("RPAREN");
+    }
+}
+
+function parse_round_function(){
+    expect("ROUND");
+    expect("LPAREN");
+    parse_expr();
+    var token = peek();
+    if(token.type === "COMMA"){
+        expect("COMMA");
+        token = peek();
+        if(token.type !== "RPAREN"){
+            parse_expr();
+        }
+    }
+    expect("RPAREN");
+}
+
+//Math Library functions
+function parse_math_lib_function(){
+    expect("MATH");
+    expect("PERIOD");
+    var token = peek();
+    var math_functions = ["CEIL", "FLOOR", "SQRT", "COS", "SIN", "TAN", "PI", "E"];
+    if(math_functions.includes(token.type)){
+        switch(token.type){
+            case "CEIL": parse_ceil_function();
+                break;
+            case "FLOOR": parse_floor_function();
+                break;
+            case "SQRT": parse_sqrt_function();
+                break;
+            case "COS": parse_cos_function();
+                break;
+            case "SIN": parse_sin_function();
+                break;
+            case "TAN": parse_tan_function();
+                break;
+            case "PI": parse_pi_constant();
+                break;
+            case "E": parse_e_constant();
+                break;
+            //INSERT SYNTAX ERROR
+            default: syntax_error("");
+                break;
+        }
+    }else{
+        //INSERT SYNTAX ERROR
+        syntax_error("");
+    }
+}
+function parse_ceil_function(){
+    expect("CEIL");
+    expect("LPAREN");
+    var token = peek();
+    parse_expr();
+    token = peek();
+    if(token.type === "COMMA"){
+        expect("COMMA");
+    }
+    expect("RPAREN");
+}
+function parse_floor_function(){
+    expect("FLOOR");
+    expect("LPAREN");
+    var token = peek();
+    parse_expr();
+    token = peek();
+    if(token.type === "COMMA"){
+        expect("COMMA");
+    }
+    expect("RPAREN");
+}
+function parse_sqrt_function(){
+    expect("SQRT");
+    expect("LPAREN");
+    var token = peek();
+    parse_expr();
+    token = peek();
+    if(token.type === "COMMA"){
+        expect("COMMA");
+    }
+    expect("RPAREN");
+}
+function parse_cos_function(){
+    expect("COS");
+    expect("LPAREN");
+    var token = peek();
+    parse_expr();
+    token = peek();
+    if(token.type === "COMMA"){
+        expect("COMMA");
+    }
+    expect("RPAREN");
+}
+function parse_sin_function(){
+    expect("SIN");
+    expect("LPAREN");
+    var token = peek();
+    parse_expr();
+    token = peek();
+    if(token.type === "COMMA"){
+        expect("COMMA");
+    }
+    expect("RPAREN");
+}
+function parse_tan_function(){
+    expect("TAN");
+    expect("LPAREN");
+    var token = peek();
+    parse_expr();
+    token = peek();
+    if(token.type === "COMMA"){
+        expect("COMMA");
+    }
+    expect("RPAREN");
+}
+function parse_pi_constant(){
+    expect("PI");
+}
+function parse_e_constant(){
+    expect("E");
+}
+
+//Random Library functions
+function parse_random_lib_function(){
+    var token = peek();
+    var token2 = peek2_ahead();
+    if(token.type === "RANDOM" && token2.type === "PERIOD"){
+        expect("RANDOM");
+        expect("PERIOD");
+        token = peek();
+        switch(token){
+            case "RANDOM": parse_random_function();
+                break;
+            case "RANDINT":
+                break;
+            case "SEED":
+                break;
+            //INSERT SYNTAX ERROR
+            default: syntax_error("");
+                break;
+        }
+    }else if(token.type === "RANDOM" && token2.type === "LPAREN"){
+        parse_random_function();
+    }else{
+        //INSERT SYNTAX ERROR
+        syntax_error("");
+    }
+}
+function parse_random_function(){
+    expect("RANDOM");
+    expect("LPAREN");
+    expect("RPAREN");
 }
 
 function syntax_error(errorType){

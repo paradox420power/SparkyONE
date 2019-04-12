@@ -30,6 +30,8 @@ function main(){
     document.getElementById("outputField").value = output;
     
     output += "\nParser:  \n" ;
+    tmpInput = input;
+    //parse_begin_program(tmpInput);
     
     lexer_cleanUp();
     output += "\nRuntime:  \n";
