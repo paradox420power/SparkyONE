@@ -419,13 +419,13 @@ function stepThroughRawInstr(instrQueue){
         
         if((currentOp.type === "PLUS" || currentOp.type === "MINUS") && suffixLength === 0 && prefixLength === 0){ //special case of instance like "-(--(4))" where it is mistakenly seeing N/A - N/A
             //we need to resolve the instrQueue to account for incorrect - & + before a number
+            console.log("Case A");
             validOp = false; //we are going to do some hands on changes that can't be sent to functions to do actual operations
             hasPrefixLength = hasSuffixLength = false;
             let precedeOp = ["+","-"];
             let unassignedOps = currentOp.id + ""; //these will be concat to the front of the next id/number token
             tmpIndex = opIndex + 1;
             while(!hasSuffixLength){ //retiterate over tokens after op token
-                console.log(unassignedOps);
                 if(tmpIndex < instrQueue.length){
                     if(precedeOp.includes(instrQueue[tmpIndex].token.id)){//found another +/-
                         suffixLength++;
@@ -444,7 +444,6 @@ function stepThroughRawInstr(instrQueue){
                     tmpIndex--; //return to last legal index
                 }
             }
-            console.log(unassignedOps);
             let newToken;
             if(suffixLength > 0){
                 if(numTypes.includes(val2[0].type)){ //this checks if the new suffix is a token like "--2"
@@ -469,11 +468,13 @@ function stepThroughRawInstr(instrQueue){
             };
             
         }else if((mathOps.includes(currentOp.type) || compareOps.includes(currentOp.type) || logicalOps.includes(currentOp.type) || assignOps.includes(currentOp.type)) && suffixLength === 0){ //special case of instances like "3-(--(-4))" where it mistakenly sees 3 - N/A
+            console.log("Case B");
             validOp = true; //this one is just getting the appropriate suffix & can then continue the operation
             hasSuffixLength = false;
             let precedeOp = ["+","-"];
             let unassignedOps = ""; //these will be concat to the front of the next id/number token
             tmpIndex = opIndex + 1;
+            console.log(currentOp.type);
             while(!hasSuffixLength){ //retiterate over tokens after op token
                 if(tmpIndex < instrQueue.length){
                     if(precedeOp.includes(instrQueue[tmpIndex].token.id)){//found another +/-
@@ -493,13 +494,19 @@ function stepThroughRawInstr(instrQueue){
                     tmpIndex--; //return to last legal index
                 }
             }
-            let newToken;
+            let newToken, tmpToken;
+            let isNeg = false;
             if(suffixLength > 0){
                 if(numTypes.includes(val2[0].type)){ //this checks if the new suffix is a token like "--2"
                     //in which case it isn't a built in function and we can append the missing +/- to the head and resolve
                     val2[0].id = unassignedOps + "" + val2[0].id;
                     val2[0].id = resolvePrecedingOperators(val2[0]);
-                    newToken = getToken(convertTokenToValue(val2).value + "", false); //convert result to a token since we proceed with operation after this conversion
+                    if(val2[0].id.charAt(0) === "-"){
+                        val2[0].id = val2[0].id.slice(1,val2[0].id.length); //if the "-" is left on it will return the wrong token in the next step
+                        isNeg = true;
+                    }
+                    tmpToken = convertTokenToValue(val2);
+                    newToken = getToken(tmpToken.value + "", false); //convert result to a token since we proceed with operation after this conversion
                 }else{ //not a simple float or number, needs to be converted
                     newToken = convertTokenToValue(val2); //convert the token to a number (could be 0b10 or even abs(2))
                     let tmpToken = getToken(newToken.value + "", false); //convert that return to a token
@@ -507,13 +514,21 @@ function stepThroughRawInstr(instrQueue){
                     val2.push(tmpToken); //push this token val2
                     val2[0].id = unassignedOps + "" + val2[0].id; //resolve it like a number now
                     val2[0].id = resolvePrecedingOperators(val2[0]);
-                    newToken = getToken(convertTokenToValue(val2).value + "", false);
+                    if(val2[0].id.charAt(0) === "-"){
+                        val2[0].id = val2[0].id.slice(1,val2[0].id.length); //if the "-" is left on it will return the wrong token in the next step
+                        isNeg = true;
+                    }
+                    tmpToken = convertTokenToValue(val2);
+                    newToken = getToken(tmpToken.value + "", false);
                 }
             }//else error detected
+            if(isNeg) //return any "-" that was sliced off
+                newToken.id = "-" + newToken.id;
             val2 = []; //clear the val2 array
             val2.push(newToken); //push the new token genrated
             
         }else if((currentOp.type === "PLUS" || currentOp.type === "MINUS") && prefixLength === 0){ //instance where it reads something like "a = -(2)" and tries N/A - 2
+            console.log("Case C");
             validOp = false;
             let precedeOp = ["+","-"];
             let unassignedOps = currentOp.id + "";
