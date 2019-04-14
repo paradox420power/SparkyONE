@@ -468,7 +468,7 @@ function stepThroughRawInstr(instrQueue){
                 type: newToken.type
             };
             
-        }else if((currentOp.type === "PLUS" || currentOp.type === "MINUS") && suffixLength === 0){ //special case of instances like "3-(--(-4))" where it mistakenly sees 3 - N/A
+        }else if((mathOps.includes(currentOp.type) || compareOps.includes(currentOp.type) || logicalOps.includes(currentOp.type) || assignOps.includes(currentOp.type)) && suffixLength === 0){ //special case of instances like "3-(--(-4))" where it mistakenly sees 3 - N/A
             validOp = true; //this one is just getting the appropriate suffix & can then continue the operation
             hasSuffixLength = false;
             let precedeOp = ["+","-"];
