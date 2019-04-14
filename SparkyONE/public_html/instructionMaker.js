@@ -154,6 +154,7 @@ function create_instructions(input){
         instr_line += lexeme.id + " ";
         appendTokenList(lexeme);
         input = input.slice(lexeme.length);
+        let openParenCount = 0;
         switch(lexeme.type){ //switch to find out which method to jump to, based off CFG
             case "BINARY": //all of these should cascade to math operation or comparison
             case "OCTAL":
@@ -162,7 +163,7 @@ function create_instructions(input){
             case "FLOAT":
             case "STRING":
             case "ID": //some assign statement or function call
-                let openParenCount = 0;
+                openParenCount = 0;
                 while(!lineEnds.includes(lexeme.type) || openParenCount !== 0){ //a line can be "a = ( 6 + \n 6) a still be treated as a single instruction
                     lexeme = getToken(input, true);
                     if(!lineEnds.includes(lexeme.type)){ //don't push a line end token to the list getting resolved, but it will be sliced
@@ -179,12 +180,20 @@ function create_instructions(input){
                 order_assign_statement(lineTokens);
                 lineTokens = [];
                 break;
+            case "IF":
+            case "ELIF":
+            case "ELSE":
             case "WHILE":
-                while(lexeme.type !== "COLON"){
+                openParenCount = 0;
+                while(lexeme.type !== "COLON" || openParenCount !== 0){
                     lexeme = getToken(input, true);
                     if(lexeme.type !== "COLON"){
                         instr_line += lexeme.id + " ";
                         appendTokenList(lexeme);
+                        if(lexeme.type === "LPAREN")
+                            openParenCount++;
+                        if(lexeme.type === "RPAREN")
+                            openParenCount--;
                     }
                     input = input.slice(lexeme.length);
                 }
@@ -195,10 +204,13 @@ function create_instructions(input){
                 input = input.slice(lexeme.length);
                 
                 pushInstr("Instruction" + instr_line, "", cmdCount, lexeme.line_no, 0); //this pushes the line being resolved before actualy step wise resolution
-                order_while_loop(lineTokens);
+                if(lineTokens[0].type === "WHILE")
+                    order_while_loop(lineTokens, input);
+                else if(lineTokens[0].type === "IF" || lineTokens[0].type === "ELIF" || lineTokens[0].type === "ELSE")
+                    order_if_statement(lineTokens, input);
+                else if(lineTokens[0].type === "DEF")
+                    order_cust_function(lineTokens, input);
                 lineTokens = [];
-                break;
-            case "IF":
                 break;
             case "SEMICOLON": //usually sliced at end of instruction lnie, this catches ";;"
             case "SPACE":
@@ -225,6 +237,7 @@ function createInstrQueue(passedTokens){
             tempToken = passedTokens[x];
             dontQueue = false;
             switch(passedTokens[x].type){//used to assign priority
+                case "DEF":
                 case "IF":
                 case "ELIF":
                 case "ELSE":
@@ -335,7 +348,10 @@ function stepThroughRawInstr(instrQueue){
     var mathOps = ["PLUS", "MINUS", "MULT", "DIV", "MOD"]; //list of operations that can be resolved in an assign statement before assigning
     var compareOps = ["COMPARE_EQUALS", "LESS_THAN", "LESS_THAN_EQUAL", "GREATER_THAN", "GREATER_THAN_EQUAL", "NOT_EQUAL"];
     var logicalOps = ["AND", "OR", "NOT"];
-    while(instrQueue.length > 1){ //assignments should resolve down to a single vlaue remaining (and it is what was assigned to a variable)
+    var assignOps = ["ADD_ASSIGN", "SUB_ASSIGN", "MULT_ASSIGN", "DIV_ASSIGN", "MOD_ASSIGN", "ASSIGN_EQUALS"];
+    var branchOps = ["WHILE", "IF", "ELIF"];
+    var numTypes = ["FLOAT", "NUMBER"];
+    while(instrQueue.length > 1 || instrQueue[0].token.type === "ELSE"){ //assignments should resolve down to a single vlaue remaining (and it is what was assigned to a variable)
         // get the tokens operated on
         //get the next priority operation
         opIndex = priorityPop(instrQueue);
@@ -392,7 +408,6 @@ function stepThroughRawInstr(instrQueue){
             console.log(val2[y].id);*/
         
         if(suffixLength !== 0){
-            //val2 = instrQueue[opIndex + 1].token;
             //resolve preceding operations on the token
             for(let y = 0; y < suffixLength; y++){ //iterate through the suffix and resolve preceding "--+-" strings
                 if(val2[y].id.charAt(0) === "+" || val2[y].id.charAt(0) === "-"){
@@ -402,13 +417,129 @@ function stepThroughRawInstr(instrQueue){
             }
         }
         
-        //need to check there isn't an instance of 3 + --(-2), because the "-" in "+--" is seens a subtraction w/out operators & should be concat to -2
-        if(prefixLength === 0 && suffixLength === 0){
+        if((currentOp.type === "PLUS" || currentOp.type === "MINUS") && suffixLength === 0 && prefixLength === 0){ //special case of instance like "-(--(4))" where it is mistakenly seeing N/A - N/A
             //we need to resolve the instrQueue to account for incorrect - & + before a number
+            validOp = false; //we are going to do some hands on changes that can't be sent to functions to do actual operations
+            hasPrefixLength = hasSuffixLength = false;
+            let precedeOp = ["+","-"];
+            let unassignedOps = currentOp.id + ""; //these will be concat to the front of the next id/number token
             tmpIndex = opIndex + 1;
+            while(!hasSuffixLength){ //retiterate over tokens after op token
+                console.log(unassignedOps);
+                if(tmpIndex < instrQueue.length){
+                    if(precedeOp.includes(instrQueue[tmpIndex].token.id)){//found another +/-
+                        suffixLength++;
+                        unassignedOps += instrQueue[tmpIndex].token.id;
+                        tmpIndex++;
+                    }else if(instrQueue[tmpIndex].priority === -1){//found correct suffix op
+                        suffixLength++;
+                        val2.push(instrQueue[tmpIndex].token); //push this new token to val2 list
+                        tmpIndex++;
+                    }else{ //if niether, end of potential suffix
+                        hasSuffixLength = true;
+                        tmpIndex--; //decrement back to last valid token
+                    }
+                }else{ //outside the length of the queue
+                    hasSuffixLength = true;
+                    tmpIndex--; //return to last legal index
+                }
+            }
+            console.log(unassignedOps);
+            let newToken;
+            if(suffixLength > 0){
+                if(numTypes.includes(val2[0].type)){ //this checks if the new suffix is a token like "--2"
+                    //in which case it isn't a built in function and we can append the missing +/- to the head and resolve
+                    val2[0].id = unassignedOps + "" + val2[0].id;
+                    val2[0].id = resolvePrecedingOperators(val2[0]);
+                    newToken = convertTokenToValue(val2); //convert result to get resolution fields
+                }else{ //not a simple float or number, needs to be converted
+                    newToken = convertTokenToValue(val2); //convert the token to a number (could be 0b10 or even abs(2))
+                    let tmpToken = getToken(newToken.value + "", false); //convert that return to a token
+                    val2 = [];
+                    val2.push(tmpToken); //push this token val2
+                    val2[0].id = unassignedOps + "" + val2[0].id; //resolve it like a number now
+                    val2[0].id = resolvePrecedingOperators(val2[0]);
+                    newToken = convertTokenToValue(val2);
+                }
+            }//else error detected
+            
+            var resolution = {
+                result: newToken.value + "",
+                type: newToken.type
+            };
+            
+        }else if((currentOp.type === "PLUS" || currentOp.type === "MINUS") && suffixLength === 0){ //special case of instances like "3-(--(-4))" where it mistakenly sees 3 - N/A
+            validOp = true; //this one is just getting the appropriate suffix & can then continue the operation
             hasSuffixLength = false;
+            let precedeOp = ["+","-"];
             let unassignedOps = ""; //these will be concat to the front of the next id/number token
-            //TODO
+            tmpIndex = opIndex + 1;
+            while(!hasSuffixLength){ //retiterate over tokens after op token
+                if(tmpIndex < instrQueue.length){
+                    if(precedeOp.includes(instrQueue[tmpIndex].token.id)){//found another +/-
+                        suffixLength++;
+                        unassignedOps += instrQueue[tmpIndex].token.id;
+                        tmpIndex++;
+                    }else if(instrQueue[tmpIndex].priority === -1){//found correct suffix op
+                        suffixLength++;
+                        val2.push(instrQueue[tmpIndex].token); //push this new token to val2 list
+                        tmpIndex++;
+                    }else{ //if niether, end of potential suffix
+                        hasSuffixLength = true;
+                        tmpIndex--; //decrement back to last valid token
+                    }
+                }else{ //outside the length of the queue
+                    hasSuffixLength = true;
+                    tmpIndex--; //return to last legal index
+                }
+            }
+            let newToken;
+            if(suffixLength > 0){
+                if(numTypes.includes(val2[0].type)){ //this checks if the new suffix is a token like "--2"
+                    //in which case it isn't a built in function and we can append the missing +/- to the head and resolve
+                    val2[0].id = unassignedOps + "" + val2[0].id;
+                    val2[0].id = resolvePrecedingOperators(val2[0]);
+                    newToken = getToken(convertTokenToValue(val2).value + "", false); //convert result to a token since we proceed with operation after this conversion
+                }else{ //not a simple float or number, needs to be converted
+                    newToken = convertTokenToValue(val2); //convert the token to a number (could be 0b10 or even abs(2))
+                    let tmpToken = getToken(newToken.value + "", false); //convert that return to a token
+                    val2 = [];
+                    val2.push(tmpToken); //push this token val2
+                    val2[0].id = unassignedOps + "" + val2[0].id; //resolve it like a number now
+                    val2[0].id = resolvePrecedingOperators(val2[0]);
+                    newToken = getToken(convertTokenToValue(val2).value + "", false);
+                }
+            }//else error detected
+            val2 = []; //clear the val2 array
+            val2.push(newToken); //push the new token genrated
+            
+        }else if((currentOp.type === "PLUS" || currentOp.type === "MINUS") && prefixLength === 0){ //instance where it reads something like "a = -(2)" and tries N/A - 2
+            validOp = false;
+            let precedeOp = ["+","-"];
+            let unassignedOps = currentOp.id + "";
+            let newToken;
+            if(suffixLength > 0){
+                if(numTypes.includes(val2[0].type)){ //this checks if the new suffix is a token like "--2"
+                    //in which case it isn't a built in function and we can append the missing +/- to the head and resolve
+                    val2[0].id = unassignedOps + "" + val2[0].id;
+                    val2[0].id = resolvePrecedingOperators(val2[0]);
+                    newToken = convertTokenToValue(val2); //convert result to get resolution fields
+                }else{ //not a simple float or number, needs to be converted
+                    newToken = convertTokenToValue(val2); //convert the token to a number (could be 0b10 or even abs(2))
+                    let tmpToken = getToken(newToken.value + "", false); //convert that return to a token
+                    val2 = [];
+                    val2.push(tmpToken); //push this token val2
+                    val2[0].id = unassignedOps + "" + val2[0].id; //resolve it like a number now
+                    val2[0].id = resolvePrecedingOperators(val2[0]);
+                    newToken = convertTokenToValue(val2);
+                }
+            }//else error detected
+            
+            var resolution = {
+                result: newToken.value + "",
+                type: newToken.type
+            };
+            
         }else{ //there was a prefix or suffix to perform the operation upon
             validOp = true;
         }
@@ -416,28 +547,25 @@ function stepThroughRawInstr(instrQueue){
         //perform the operation
         if(validOp){
             if(mathOps.includes(currentOp.type)){ //if the next prioritized operation is math, go to resolve Math
-                /*NEEDS UPDATE, if((currentOp.type === "PLUS" || currentOp.type === "MINUS") && prefixLength === 0){ //special check case of -(-2) where the "-" outside paren is seen as a minus
-                    val2.id = currentOp.id + val2.id; //concat the op to the front of the value
-                    let newVal = resolvePrecedingOperators(val2); //resolve it like a normal -- or -+ instance
-                    val2.id = newVal;
-                    resolution = {
-                        result: val2.id + "",
-                        type: val2.type
-                    };
-                }else*/
-                    resolution = resolveMath(val1, currentOp, val2);
+                resolution = resolveMath(val1, currentOp, val2);
             }else if(compareOps.includes(currentOp.type)){ //check if it is a comparator
                 resolution = resolveCompare(val1, currentOp, val2);
             }else if(logicalOps.includes(currentOp.type)){
                 resolution = resolveLogicalOp(val1, currentOp, val2);
                 if(currentOp.type === "NOT")
                     prefixLength = 0; //even if a valid token was in front of "not" it didn't actually perform in this operation
-            }else if(currentOp.type === "WHILE"){
+            }else if(branchOps.includes(currentOp.type)){
                 resolution = resolve_value_True_or_False(val2);
                 takeBranch = resolution.result;
-            }else{ //else it assumed to be an assignment statement
+            }else if(currentOp.type === "ELSE"){
+                var resolution = {
+                    result: 1 + "",
+                    type: "TRUE"
+                };
+                takeBranch = resolution.result;
+            }else if(assignOps.includes(currentOp.type)){ //else it assumed to be an assignment statement
                 resolution = resolveAssign(val1, currentOp, val2);
-            }
+            }//else if "def"
         }
         //regardless of op validity, a resolution is needed
         resolveQueue(opIndex, instrQueue, resolution, prefixLength, suffixLength); //remove these tokens & replace with ID for the resolution
@@ -473,14 +601,14 @@ function order_assign_statement(passedTokens){
     instrQueue = []; //for added measure, there should only be 1 token in the queue but it never hurts to empty it at conclusion
 }
 
-function order_while_loop(passedTokens){ //not properly updated for code changes made from 3/27
+function order_while_loop(passedTokens, input){
     var instrQueue = createInstrQueue(passedTokens);
     var lineOfInsidence = instrQueue[0].token.line_no;//since the tokens are being dealt with in another method, we need to store the line they occur on
     
     var takeBranch = stepThroughRawInstr(instrQueue); //this method returns a boolean used to determine if we stay in the loop
     
     //resolve the state of the while loop
-    if(takeBranch){
+    if(takeBranch === "1"){
         pushInstr("The While loop evaluated to True, take the path", "" , cmdCount, lineOfInsidence, 0);
         //read & store nested instructions for operation
     }else{
@@ -488,6 +616,31 @@ function order_while_loop(passedTokens){ //not properly updated for code changes
         //skip nested instructions
     }
     //check conditional & possibly loop again
+    
+}
+
+function order_if_statement(passedTokens, input){
+    var instrQueue = createInstrQueue(passedTokens);
+    var lineOfInsidence = instrQueue[0].token.line_no;//since the tokens are being dealt with in another method, we need to store the line they occur on
+    
+    var takeBranch = stepThroughRawInstr(instrQueue); //this method returns a boolean used to determine if we enter the indents
+    
+    //resolve the state of the while loop
+    if(takeBranch === "1"){
+        pushInstr("The statement evaluated to True, take the path", "" , cmdCount, lineOfInsidence, 0);
+        //read & store nested instructions for operation
+    }else{
+        pushInstr("The statement evaluated to False, don't take the path", "" , cmdCount, lineOfInsidence, 0);
+        //skip nested instructions
+    }
+    
+}
+
+function order_cust_Function(passedTokens, input){
+    var instrQueue = createInstrQueue(passedTokens);
+    var lineOfInsidence = instrQueue[0].token.line_no;//since the tokens are being dealt with in another method, we need to store the line they occur on
+    
+    var takeBranch = stepThroughRawInstr(instrQueue); //this method returns a boolean used to determine if we stay in the loop
     
 }
 
