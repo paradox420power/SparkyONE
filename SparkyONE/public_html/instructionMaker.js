@@ -236,6 +236,7 @@ function createInstrQueue(passedTokens){
         if(passedTokens[x].type !== "SPACE"){
             tempToken = passedTokens[x];
             dontQueue = false;
+            let strToken; //holder if a string token is found
             switch(passedTokens[x].type){//used to assign priority
                 case "DEF":
                 case "IF":
@@ -253,23 +254,23 @@ function createInstrQueue(passedTokens){
                 case "AND":
                 case "OR": tempPriority = 1 + priorityMod;
                     break;
-                case "NOT": tempPriority = 2 + priorityMod;
-                    break;
                 case "COMPARE_EQUALS": //operations can have comparators, for some reason
                 case "LESS_THAN_EQUAL":
                 case "LESS_THAN":
                 case "GREATER_THAN_EQUAL":
                 case "GREATER_THAN":
-                case "NOT_EQUAL": tempPriority = 3 + priorityMod;
+                case "NOT_EQUAL": tempPriority = 2 + priorityMod;
                     break;
                 case "PLUS":
-                case "MINUS": tempPriority = 4 + priorityMod;
+                case "MINUS": tempPriority = 3 + priorityMod;
                     break;
                 case "MULT":
-                case "DIV": tempPriority = 5 + priorityMod;
+                case "DIV": tempPriority = 4 + priorityMod;
                     break;
                 case "MOD":
-                case "EXPONENTIAL": tempPriority = 6 + priorityMod;
+                case "EXPONENTIAL": tempPriority = 5 + priorityMod;
+                    break;
+                case "NOT": tempPriority = 6 + priorityMod;
                     break;
                 case "LPAREN": priorityMod += 10; //all parenthised operations need to be executed before a higher priority external instr.
                     dontQueue = true; //don't push Parens to the Queue
@@ -283,6 +284,50 @@ function createInstrQueue(passedTokens){
                 case "SEMICOLON": //these shouldn't be passed at all, but we want to really avoid treating them as instr. by this point
                 case "END_OF_LINE":
                 case "END_OF_FILE": dontQueue = true;
+                    break;
+                case "APOSTROPHE": //we need to put the entire string in a single token instance
+                    x++; //go to next token in the list
+                    if(passedTokens[x].type !== "APOSTROPHE"){ //if this is true we read "", an empty string
+                        strToken = passedTokens[x];
+                        strToken.charStart--; //decrement this back 1 character so it can highlight the starting quote
+                        strToken.type = "STRING"; //update the type
+                        x++; //increment again
+                        while(passedTokens[x].type !== "APOSTROPHE"){ //we only have to look for next " since we can assume the string declaration is syntactically correct from parser
+                            strToken.id += passedTokens[x].id;
+                            strToken.length += passedTokens[x].length;
+                            x++; //don't forget to increment token looked at
+                        }
+                        strToken.charEnd = passedTokens[x].charEnd; //char range includes finishing quote
+                    }else{
+                        strToken = passedTokens[x];
+                        strToken.charStart--; //decrement this back 1 character so it can highlight the starting quote
+                        strToken.id = ""; //treat this as an empty string
+                        strToken.length = 0;
+                    }
+                    tempToken = strToken; //replace what gets pushed to queue with the string
+                    tempPriority = -1; //this is not an operating token
+                    break;
+                case "QUOTE": //we need to put the entire string in a single token instance
+                    x++; //go to next token in the list
+                    if(passedTokens[x].type !== "QUOTE"){ //if this is true we read "", an empty string
+                        strToken = passedTokens[x];
+                        strToken.charStart--; //decrement this back 1 character so it can highlight the starting quote
+                        strToken.type = "STRING"; //update the type
+                        x++; //increment again
+                        while(passedTokens[x].type !== "QUOTE"){ //we only have to look for next " since we can assume the string declaration is syntactically correct from parser
+                            strToken.id += passedTokens[x].id;
+                            strToken.length += passedTokens[x].length;
+                            x++; //don't forget to increment token looked at
+                        }
+                        strToken.charEnd = passedTokens[x].charEnd; //char range includes finishing quote
+                    }else{
+                        strToken = passedTokens[x];
+                        strToken.charStart--; //decrement this back 1 character so it can highlight the starting quote
+                        strToken.id = ""; //treat this as an empty string
+                        strToken.length = 0;
+                    }
+                    tempToken = strToken; //replace what gets pushed to queue with the string
+                    tempPriority = -1; //this is not an operating token
                     break;
                 default: //ID, number, float, binary, octal, hex
                     tempPriority = -1;
@@ -345,7 +390,7 @@ function stepThroughRawInstr(instrQueue){
     var hasPrefixLength, hasSuffixLength, tmpIndex;
     var validOp = false; //used to check for misunderstandings in the tokens before operating
     var resolution;
-    var mathOps = ["PLUS", "MINUS", "MULT", "DIV", "MOD"]; //list of operations that can be resolved in an assign statement before assigning
+    var mathOps = ["PLUS", "MINUS", "MULT", "DIV", "MOD", "EXPONENTIAL"]; //list of operations that can be resolved in an assign statement before assigning
     var compareOps = ["COMPARE_EQUALS", "LESS_THAN", "LESS_THAN_EQUAL", "GREATER_THAN", "GREATER_THAN_EQUAL", "NOT_EQUAL"];
     var logicalOps = ["AND", "OR", "NOT"];
     var assignOps = ["ADD_ASSIGN", "SUB_ASSIGN", "MULT_ASSIGN", "DIV_ASSIGN", "MOD_ASSIGN", "ASSIGN_EQUALS"];
@@ -467,7 +512,10 @@ function stepThroughRawInstr(instrQueue){
                 type: newToken.type
             };
             
-        }else if((mathOps.includes(currentOp.type) || compareOps.includes(currentOp.type) || logicalOps.includes(currentOp.type) || assignOps.includes(currentOp.type)) && suffixLength === 0){ //special case of instances like "3-(--(-4))" where it mistakenly sees 3 - N/A
+            resolveQueue(opIndex, instrQueue, resolution, prefixLength, suffixLength); //remove these tokens & replace with ID for the resolution
+            
+        }else if((mathOps.includes(currentOp.type) || compareOps.includes(currentOp.type) || logicalOps.includes(currentOp.type) || assignOps.includes(currentOp.type))
+                && suffixLength === 0 && currentOp.type !== "NOT"){ //special case of instances like "3-(--(-4))" where it mistakenly sees 3 - N/A
             console.log("Case B");
             validOp = true; //this one is just getting the appropriate suffix & can then continue the operation
             hasSuffixLength = false;
@@ -555,6 +603,25 @@ function stepThroughRawInstr(instrQueue){
                 type: newToken.type
             };
             
+            resolveQueue(opIndex, instrQueue, resolution, prefixLength, suffixLength); //remove these tokens & replace with ID for the resolution
+        
+        }else if(currentOp.type === "NOT" && suffixLength === 0){ //for sequences of "not not not ..."
+            //this will be a sliding method, we know there is a string of nots and something to operate on at some point to the right,
+            //we will slide the opIndex over to the not just before that value & increase its priority without doing a resolution, so on next iteration
+            //the right most not will be resolved first
+            let tempIndex = opIndex + 1;
+            let hasOpIndex = false;
+            while(!hasOpIndex && tempIndex < instrQueue.length){
+                if(instrQueue[tempIndex].priority !== -1){
+                    tempIndex++; //just another not
+                }else{
+                    hasOpIndex = true;
+                    tempIndex--; //got back to preceding not
+                }
+            }
+            opIndex = tempIndex;
+            instrQueue[opIndex].priority++;
+            
         }else{ //there was a prefix or suffix to perform the operation upon
             validOp = true;
         }
@@ -581,9 +648,9 @@ function stepThroughRawInstr(instrQueue){
             }else if(assignOps.includes(currentOp.type)){ //else it assumed to be an assignment statement
                 resolution = resolveAssign(val1, currentOp, val2);
             }//else if "def"
+            
+            resolveQueue(opIndex, instrQueue, resolution, prefixLength, suffixLength); //remove these tokens & replace with ID for the resolution
         }
-        //regardless of op validity, a resolution is needed
-        resolveQueue(opIndex, instrQueue, resolution, prefixLength, suffixLength); //remove these tokens & replace with ID for the resolution
         
         
         //for debugging purposes
@@ -757,12 +824,16 @@ function convertTokenToValue(token){
             }else if(valueType === "FLOAT"){
                 value = Number.parseFloat(getVarValue(index));
                 result = value;
+            }else if(valueType === "STRING"){
+                value = getVarValue(index);
+                result = value;
             }else{
                 value = Number.parseInt(getVarValue(index), 10);//assumes to be an int at this point
                 result = value;
             }
+            opToken.type = valueType;
         }else{//new variable, but it can't be declared here
-            //Undecalred variable error to put here
+            runtime_error("UNDECLARED_VAR");
         }
         pushInstr("Variable " + instr, " is resolved to " + result, cmdCount, opToken.line_no, 0);
     }else{
@@ -806,6 +877,9 @@ function convertTokenToValue(token){
             case "FALSE":
                 value = 0;
                 break;
+            case "STRING":
+                value = opToken.id;
+                break;
         }
         //push hex, oct, & binary conversion
         if(opToken.type === "BINARY" || opToken.type === "OCTAL" || opToken.type === "HEX"){ //nothing to really show on that conversion
@@ -832,7 +906,7 @@ function getResultType(token1, operation, token2){
         if(index !== -1){//varialbe is declared
             type1 = getVarType(index);
         }else{
-            //undeclared variable error to go here
+            runtime_error("UNDECLARED_VAR");
         }
     }else{
         type1 = token1.type;
@@ -842,13 +916,14 @@ function getResultType(token1, operation, token2){
         if(index !== -1){//varialbe is declared
             type2 = getVarType(index);
         }else{
-            //undeclared variable error to go here
+            runtime_error("UNDECLARED_VAR");
         }
     }else{
         type2 = token2.type;
     }
     
-    var mathOps = ["PLUS", "MINUS", "MULT", "DIV", "MOD"]; //list of operations that can be resolved in an assign statement before assigning
+    var mathOps = ["PLUS", "MINUS", "MULT", "DIV", "MOD", "EXPONENTIAL"]; //list of operations that can be resolved in an assign statement before assigning
+    var compareOps = ["COMPARE_EQUALS", "LESS_THAN", "LESS_THAN_EQUAL", "GREATER_THAN", "GREATER_THAN_EQUAL", "NOT_EQUAL"];
     //boolean operations (such as "==" of "and") are handled in the resolve Method
     var incompatTypes = [];
     if(mathOps.includes(operation.type)){
@@ -858,20 +933,29 @@ function getResultType(token1, operation, token2){
                 resultType = "FLOAT";
             }else{
                 //ERROR, type mismatch
+                runtime_error("INCOMPATIBLE_TYPES");
             }
         }else if(type1 === "STRING" || type2 === "STRING"){
             incompatTypes = ["FLOAT", "NUMBER", "BINARY", "OCTAL", "HEX", "TRUE", "FALSE"];
             if(! (incompatTypes.includes(type1) || incompatTypes.includes(type2)) ){ //cannot math op a float & string
                 resultType = "STRING";
+                if(operation.type !== "PLUS") //strings can only do addition
+                    runtime_error("INVALID_OP");
             }else{
                 //ERROR, type mismatch
+                runtime_error("INCOMPATIBLE_TYPES");
             }
             //TODO
         }else{ //all other math ops should resolve to a number
             resultType = "NUMBER";
         }
         
-    }//no else, but should circumstance demand this can be expanded
+    }else if(compareOps.includes(operation.type)){
+        if(type1 === "STRING" || type2 === "STRING") //if one is a string
+            if(type1 !== "STRING" || type2 !== "STRING") //and the other isn't a string
+                if(operation.type !== "COMPARE_EQUALS" && operation.type !== "NOT_EQUAL") //then it can only be equal/not-equal
+                    runtime_error("INCOMPATIBLE_TYPES");
+    }//and, or, & not are compatible with all op types encoded thus far
     
     return resultType;
 }
@@ -882,24 +966,33 @@ function resolveMath(val1, op, val2){
     var num1, num2, tokenVal1, tokenVal2;
     tokenVal1 = convertTokenToValue(val1);
     tokenVal2 = convertTokenToValue(val2);
+    //get result type before attempting op to avoid invalid operations
+    var resultType = getResultType(tokenVal1, op, tokenVal2); //check result type & if passed types are comapatible with that operation
     num1 = tokenVal1.value;
     num2 = tokenVal2.value;
-    switch(op.type){
-        case "PLUS":
-            resolved = num1 + num2;
-            break;
-        case "MINUS":
-            resolved = num1 - num2;
-            break;
-        case "MULT":
-            resolved = num1 * num2;
-            break;
-        case "DIV":
-            resolved = num1 / num2;
-            break;
-        case "MOD":
-            resolved = num1 % num2;
-            break;
+    if(tokenVal1.type !== "STRING" && tokenVal2.type !== "STRING"){
+        switch(op.type){
+            case "PLUS":
+                resolved = num1 + num2;
+                break;
+            case "MINUS":
+                resolved = num1 - num2;
+                break;
+            case "MULT":
+                resolved = num1 * num2;
+                break;
+            case "DIV":
+                resolved = num1 / num2;
+                break;
+            case "MOD":
+                resolved = num1 % num2;
+                break;
+            case "EXPONENTIAL":
+                resolved = Math.pow(num1, num2);
+                break;
+        }
+    }else{ //both operations are a string, only addition is operable between 2 strings
+        resolved = num1 + "" + num2; //num 1 & 2 might be a dated name sake...
     }
     instr = "";
     if(tokenVal1.type !== "TRUE" && tokenVal1.type !== "FALSE" && tokenVal1.type !== "NONE"){
@@ -915,7 +1008,6 @@ function resolveMath(val1, op, val2){
     }
     //push the math operation performed
     pushInstr("Operation " + instr, " is resolved to " + resolved, cmdCount, lineN, 0);
-    var resultType = getResultType(tokenVal1, op, tokenVal2); //check result type & if passed types are comapatible with that operation
     var resolution = {
         result: resolved + "",
         type: resultType
@@ -929,9 +1021,11 @@ function resolveCompare(val1, op, val2){
     var num1, num2;
     var token1 = convertTokenToValue(val1);
     var token2 = convertTokenToValue(val2);
+    var resultType = getResultType(token1, op, token2); //best to ensure legal operation
     num1 = token1.value;
     num2 = token2.value;
     //don't need to worry about num1/2 type since the result of this operation should be boolean
+    //string comparison in JavaScript has same returns as in Python, so no special cases for string comparisons
     switch(op.type){
         case "COMPARE_EQUALS":
             if(num1 === num2)
@@ -1008,32 +1102,66 @@ function resolveLogicalOp(val1, op, val2){
     
     var bool1, bool2;
     //convert the arguments to their boolean equivalent
-    if(val1.length !== 0)
-        bool1 = convertTokenToValue(val1).value;
     if(val2.length !== 0)
-        bool2 = convertTokenToValue(val2).value;
+        bool2 = convertTokenToValue(val2);
+    if(val1.length !== 0)
+        bool1 = convertTokenToValue(val1);
+    else //when doing not, bool1 will be undeclared but we want to avoid undeclared erros
+        bool1 = bool2; //used to avoid undeclared bool1 error
+    if(op.type !== "NOT") //NOT has no operating restrictions under current scope
+        var resultType = getResultType(bool1, op, bool2); //best to ensure legal operation
     //don't need to worry about num1/2 type since the result of this operation should be boolean
     //perform the actual comparison & store it in the instr string
-    switch(op.type){
-        case "AND": instr = "Comparing " + prefix + " " + op.id + " " + suffix + " ";
-                    result = bool1 && bool2; //(0|1) && (0|1)
-            break;
-        case "OR": instr = "Comparing " + prefix + " " + op.id + " " + suffix + " ";
-                    result = bool1 || bool2; //(0|1) || (0|1)
-            break;
-        case "NOT": instr = "Negating " + suffix + " ";
-                    result++; //since it is treating 1 as true and everything not 1 as false, this works
-            break;
+    if(bool2.type !== "STRING" && bool1.type !== "STRING"){ //simple numeric comparison, important to check bool2 first as bool1 might not be declared if using a not operation
+        switch(op.type){
+            case "AND": instr = "Comparing " + bool1.value + " " + op.id + " " + bool2.value + " ";
+                        result = bool1.value && bool2.value; //(0|1) && (0|1)
+                break;
+            case "OR": instr = "Comparing " + bool1.value + " " + op.id + " " + bool2.value + " ";
+                        result = bool1.value || bool2.value; //(0|1) || (0|1)
+                break;
+            case "NOT": instr = "Negating " + bool2.value + " ";
+                        bool2.value++;
+                        result = bool2.value; //since it is treating 1 as true and everything not 1 as false, this works
+                break;
+        }
+        
+        //the result is currently 1 or 0, convert that to a textual True/False
+        if(result === 1){
+            result = "True";
+            resultType = "TRUE";
+        }else{
+            result = "False";
+            resultType = "FALSE";
+        }
+    }else{//string special comparison
+        switch(op.type){
+            case "AND": instr = "Comparing " + bool1.value + " " + op.id + " " + bool2.value + " ";
+                //Python and with a string always returns the 2nd input
+                result = bool2.value;
+                resultType = bool2.type;
+                break;
+            case "OR": instr = "Comparing " + bool1.value + " " + op.id + " " + bool2.value + " ";
+                //Python or with a string always returns 1st input
+                result = bool1.value;
+                resultType = bool1.type;
+                break;
+            case "NOT": instr = "Negating " + suffix + " ";
+                //not-ing a string is always false
+                result = "False";
+                resultType = "FALSE";
+                break;
+        }
+        
+        if(resultType === "TRUE" || resultType === "FALSE"){ //convet number booleans back to boolean readable values
+            if(result === 1){
+                result = "True";
+            }else{
+                result = "False";
+            }
+        }
     }
-    //the result is currently 1 or 0, convert that to a textual True/False
-    var resultType;
-    if(result === 1){
-        result = "True";
-        resultType = "TRUE";
-    }else{
-        result = "False";
-        resultType = "FALSE";
-    }
+    
     //push the final result to the instruction queue
     pushInstr(instr, "is resolved to " + result, cmdCount, lineN, 0);
     var resolution = {
@@ -1115,7 +1243,9 @@ function resolveAssign(val1, op, val2){
             updateVarValue(index, newVal);
             updateVarType(index, newVarType);
         }
-    }//else this is an invalid assignment statement
+    }else{
+        runtime_error("INVALID_ASSIGNMENT");
+    }
     pushInstr("Assignment " + instr, " resolved to value " + resolved, cmdCount, lineN, 0);
     var resultType = "ID"; //assign should always go to ID, 4 = 5 is bad
     var resolution = {
@@ -1164,4 +1294,25 @@ function resolve_built_ins(token)
     }
     
     return res;
+}
+
+function runtime_error(errorType){ //TODO: flesh out types
+    switch(errorType){
+        case "UNDECLARED_VAR":
+            alert("Undeclared variable used");
+            exit();
+            break;
+        case "INCOMPATIBLE_TYPES":
+            alert("Types incompatible for that operation");
+            exit(); 
+            break;
+        case "INVALID_OP":
+            alert("Operation incompatible for those types");
+            exit();
+            break;
+        case "INVALID_ASSIGNMENT":
+            alert("Cannot assign to that value");
+            exit();
+            break;
+    }
 }

@@ -14,24 +14,25 @@ function main(){
     var output;
     var lexeme; //used in lexer debugging
     
-    output = "Input Code: " + input + "\n";
+    output = "Input Code: \n" + input + "\n";
     
  
-    output += "Lexer:  \n";
+    output += "\nLexer:  \n";
 
     var tmpInput = input;
-    while(tmpInput.length > 0){
+    /*while(tmpInput.length > 0){
         lexeme = getToken(tmpInput, true);
         tmpInput = tmpInput.slice(lexeme.length);
         if(lexeme.type !== "SPACE")
            output += ("ID: " + lexeme.id + ", Type: " + lexeme.type + ", Length: " + lexeme.length + ", Line: " + lexeme.line_no + ", Uses characters " + lexeme.charStart + "-" + lexeme.charEnd + "\n" );
-    }
+    }*/
     
     document.getElementById("outputField").value = output;
     
     output += "\nParser:  \n" ;
     tmpInput = input;
     //parse_begin_program(tmpInput);
+    output += "Error Free Compilation\n";
     
     lexer_cleanUp();
     output += "\nRuntime:  \n";
