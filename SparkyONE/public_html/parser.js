@@ -34,27 +34,39 @@ function skipSpaces(){
 // Checks current token with indent_stack for dedent and unexpected indentation
 function check_indents(){
     var token = getToken(program, false);
-    if(indent_stack.length !== 1){
-        var current = indent_stack.pop();
-        if(token.length > current[1]){
-            //unexpected indent
-            indent_stack = [];
-            indent_stack.push(0);
-            //document.write("index syntax error at line " + token.line_no + "<br>Current: " + current + " TabLength: " + token.length + "<br>");
-            syntax_error("INDENTATION_ERROR");
-        }else if(token.length < current[1]){
-            //possible dedent
-            //document.write("Popping: " + current + "<br>");
-            //document.write(indent_stack.toString() + "<br>");
-            check_indents();
-        }else if(token.length === current[1]){
-            //matching indent
-            program = program.slice(token.length);
-            indent_stack.push(current[1]);
+    if(token.type !== "SPACE"){
+        if(indent_stack.length === 1){
+            //There has been no new level of indentation
+            //do nothing as this should be valid
+        }else{
+            //there was a dedent that led to the first indentation level
+            while(indent_stack.length !== 1){
+                indent_stack.pop();
+            }
         }
     }else{
-        if(token.type === "SPACE"){
-            syntax_error("INDENTATION_ERROR");
+        if(indent_stack.length !== 1){
+            var current = indent_stack.pop();
+            if(token.length > current){
+                //unexpected indent
+                indent_stack = [];
+                indent_stack.push(0);
+                //document.write("index syntax error at line " + token.line_no + "<br>Current: " + current + " TabLength: " + token.length + "<br>");
+                syntax_error("INDENTATION_ERROR");
+            }else if(token.length < current){
+                //possible dedent
+                //document.write("Popping: " + current + "<br>");
+                //document.write(indent_stack.toString() + "<br>");
+                check_indents();
+            }else if(token.length === current){
+                //matching indent
+                program = program.slice(token.length);
+                indent_stack.push(current);
+            }
+        }else{
+            if(token.type === "SPACE"){
+                syntax_error("INDENTATION_ERROR");
+            }
         }
     }
 }
@@ -62,14 +74,21 @@ function check_indents(){
 function increase_indent(){
     var token = getToken(program, false);
     if(token.type === "SPACE"){
-        current = indent_stack.pop();
-        if(current === token.length){
-            indent_stack.push(current);
+        var current = indent_stack.pop();
+        if(token.length <= current){
+            //TO DO, insert syntax error
+            //expected an indent
+            syntax_error("");
+            //indent_stack.push(current);
         }else{
             indent_stack.push(current);
             indent_stack.push(token.length);
             //document.write("Token: " + token.type + " adding " + token.length + " to stack at line " + token.line_no + "<br>");
         }
+    }else{
+        //TO DO, insert syntax error
+        //expected a new level of indentation
+        syntax_error("");
     }
 }
 
@@ -80,12 +99,14 @@ function saveSpaces(){
     var token = getToken(program, false);
     if(token.type === "SPACE"){
         return token.length;
+    }else{
+        return 0;
     }
 }
 
 function returnHeldSpaces(spaces){
-    allSpaces = "";
-    for(x = 0; x < spaces; x++)
+    var allSpaces = "";
+    for(var x = 0; x < spaces; x++)
         allSpaces += " ";
     program = allSpaces + program;
 }
@@ -115,7 +136,6 @@ function expect(tokenType){
     if(token.type === tokenType){
         program = program.slice(token.length);
         if(token.type === "END_OF_LINE"){
-            incrementCodeLine();
             readEmptyLines();
             //check correct indents (stack issue)
             //check_indents();
@@ -150,7 +170,6 @@ function readEmptyLines(){
         }
     }else if(token.type === "END_OF_LINE"){
         program = program.slice(token.length);
-        incrementCodeLine();
         readEmptyLines();
     }
 }
@@ -383,17 +402,25 @@ function parse_return_stmt(){
     }
 }
 
-function parse_stmt_list(){
-    parse_stmt();
+function parse_stmt_list(onSameLine = false){
+    parse_stmt(onSameLine);
     var token = peek();
+    var spaceCount;
+    var sameLine = onSameLine;
+    
     if(token.type !== "END_OF_FILE"){//some statements are the end of the program & won't have a line break
         if(token.type === "END_OF_LINE"){
             expect("END_OF_LINE");
+            spaceCount = saveSpaces();
         }else if(token.type === "SEMICOLON"){
             expect("SEMICOLON");
+            sameLine = true;
             token = peek(); //sometimes a semicolon is followed by a line break
-            if(token.type === "END_OF_LINE")
+            if(token.type === "END_OF_LINE"){
                 expect("END_OF_LINE");
+                spaceCount = saveSpaces();
+                sameLine = false;
+            }
         }else{
             //TO DO
             //INSERT SYNTAX ERROR
@@ -401,7 +428,7 @@ function parse_stmt_list(){
         }
     }
     //var stmt_Starts = ["IF", "FOR", "WHILE", "ID", "RETURN", "HASH_TAG"];
-    var spaceCount = saveSpaces(); //need to be held on to for indent stack purposes
+    //spaceCount = saveSpaces(); //need to be held on to for indent stack purposes
     token = peek();
     returnHeldSpaces(spaceCount); //now that we've peeked the next token we return the spaces
     
@@ -411,21 +438,22 @@ function parse_stmt_list(){
         alert("Nested Function Declaration is Not Supported at This Time");
         exit();
     }else{
-        parse_stmt_list();
+        parse_stmt_list(sameLine);
     }
 }
 
-function parse_stmt(){
-    var spaceCount = saveSpaces();
+function parse_stmt(sameLine = false){
+    var spaceCount = saveSpaces(); //need to be held on to for indent stack purposes
     var token = peek();
     //TO DO
     //Account for multiline comments
     if(token.type === "HASH_TAG"){
         parse_comment();
-        //document.write("<br>" + program + "<br>The fuck:<br" + program +"><br>")
     }else{
-        returnHeldSpaces(spaceCount);
-        check_indents();
+        returnHeldSpaces(spaceCount); //now that we've peeked the next token we return the spaces
+        if(!sameLine){
+            check_indents();
+        }
         var token = peek();
         if(bgnTokens.includes(token.type)){
             switch(token.type){
@@ -807,6 +835,7 @@ function parse_assign_op(){
 
 function parse_primary(){
     var token = peek();
+    //document.write("Token: " + token.type + " " + token.id + "<br>")
     var primaries = ["ID", "NUMBER", "FLOAT", "TRUE", "FALSE", "QUOTE", "APOSTROPHE", "NONE"];
     if(primaries.includes(token.type)){
         switch(token.type){
@@ -825,7 +854,9 @@ function parse_primary(){
                 break;
             case "NONE": expect("NONE");
                 break;
-            default: syntax_error("INVALID_PRIMARY");
+            default: 
+                //document.write("Token: " + token.type + " " + token.id + "<br>")
+                syntax_error("INVALID_PRIMARY");
                 break;
         }
     }else{
@@ -1919,61 +1950,64 @@ function parse_randint_function(){
 }
 
 function syntax_error(errorType){
-    testingResult = false;
-    program = "";
     //document.write("<br>" + testingResult + "<br>");
-    if (errorType === "UNKNOWN_SYMBOL"){
-        errorResult = "Program contains unknown symbols!";
-        //exit();
-    }else if (errorType === "INVALID_STATEMENT"){
-        errorResult = "Invalid statement!";
-        //exit();
-    }else if (errorType === "INDENTATION_ERROR"){
-        errorResult = "Indentation error detected!";
-        //exit();
-    }else if (errorType === "INVALID_COND_OPERATOR"){
-        errorResult = "Invalid conditional operator!";
-        //exit();
-    }else if (errorType === "INVALID_COMP_OPERATOR"){
-        errorResult = "Invalid comparison operator!";
-        //exit();
-    }else if (errorType === "INVALID_LINK"){
-        errorResult = "Invalid comparison link!";
-        //exit();
-    }else if (errorType === "INVALID_RANGE"){
-        errorResult = "Invalid ranged specified!";
-        //exit();
-    }else if (errorType === "INVALID_RHS"){
-        errorResult = "Invalid right-hand side value/variable";
-        //exit();
-    }else if (errorType === "INVALID_ASSIGNMENT"){
-        errorResult = "Invalid assignment operation!";
-        //exit();
-    }else if (errorType === "INVALID_ASSIGN_OPERATOR"){
-        errorResult = "Invalid assignment operator!";
-        //exit();
-    }else if (errorType === "INVALID_PRIMARY"){
-        errorResult = "Invalid primary type!";
-        //exit();
-    }else if (errorType === "NON_FORMAT_ERROR"){
-        errorResult = "Only format() allowed!";
-        //exit();
-    }else if (errorType === "INVALID_OPERATOR"){
-        errorResult = "Invalid arithmetic operator!";
-        //exit();
-    }else if (errorType === "ERROR_MISSING_RIGHT_PARENTHESIS"){
-        errorResult = "Expecting right parenthesis!";
-        //exit();
-    }else if (errorType === "ERROR_FORMAT_VIOLATION"){
-        errorResult = "format() violation detected!";
-        //exit();
-    }else if (errorType === "INVALID_INPUT"){
-        errorResult = "Invalid input!";
-        //exit();
-    }else{
-        //document.write("Unspecified Error<br>");
-        errorResult = "Unspecified Error";
-        //exit();
+    if(testingResult){
+        testingResult = false;
+        program = "";
+        
+        if (errorType === "UNKNOWN_SYMBOL"){
+            errorResult = "Program contains unknown symbols!";
+            //exit();
+        }else if (errorType === "INVALID_STATEMENT"){
+            errorResult = "Invalid statement!";
+            //exit();
+        }else if (errorType === "INDENTATION_ERROR"){
+            errorResult = "Indentation error detected!";
+            //exit();
+        }else if (errorType === "INVALID_COND_OPERATOR"){
+            errorResult = "Invalid conditional operator!";
+            //exit();
+        }else if (errorType === "INVALID_COMP_OPERATOR"){
+            errorResult = "Invalid comparison operator!";
+            //exit();
+        }else if (errorType === "INVALID_LINK"){
+            errorResult = "Invalid comparison link!";
+            //exit();
+        }else if (errorType === "INVALID_RANGE"){
+            errorResult = "Invalid ranged specified!";
+            //exit();
+        }else if (errorType === "INVALID_RHS"){
+            errorResult = "Invalid right-hand side value/variable";
+            //exit();
+        }else if (errorType === "INVALID_ASSIGNMENT"){
+            errorResult = "Invalid assignment operation!";
+            //exit();
+        }else if (errorType === "INVALID_ASSIGN_OPERATOR"){
+            errorResult = "Invalid assignment operator!";
+            //exit();
+        }else if (errorType === "INVALID_PRIMARY"){
+            errorResult = "Invalid primary type!";
+            //exit();
+        }else if (errorType === "NON_FORMAT_ERROR"){
+            errorResult = "Only format() allowed!";
+            //exit();
+        }else if (errorType === "INVALID_OPERATOR"){
+            errorResult = "Invalid arithmetic operator!";
+            //exit();
+        }else if (errorType === "ERROR_MISSING_RIGHT_PARENTHESIS"){
+            errorResult = "Expecting right parenthesis!";
+            //exit();
+        }else if (errorType === "ERROR_FORMAT_VIOLATION"){
+            errorResult = "format() violation detected!";
+            //exit();
+        }else if (errorType === "INVALID_INPUT"){
+            errorResult = "Invalid input!";
+            //exit();
+        }else{
+            //document.write("Unspecified Error<br>");
+            errorResult = "Unspecified Error";
+            //exit();
+        }
     }
     
 }
