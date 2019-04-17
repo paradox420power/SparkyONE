@@ -1220,76 +1220,77 @@ function resolveLogicalOp(val1, op, val2){
 
 function resolveAssign(val1, op, val2){
     var instr, resolved, lineN, intermediateRes;
-    var index, newVal, newVarType;
-    let tmpOp = op;
-    //when operating here, always assume val1 is a single index array with an ID token type. Anything else would be a syntax error
-    switch(op.type){
-        case "ASSIGN_EQUALS":
-            var numToAssign = convertTokenToValue(val2); //hex, oct, & bin not always resolved prior in this case
-            switch(numToAssign.type){
-                case "BINARY": numToAssign.value = "0b" + numToAssign.value.toString(2);
-                    break;
-                case "OCTAL": numToAssign.value = "0o" + numToAssign.value.toString(8);
-                    break;
-                case "HEX": numToAssign.value = "0x" + numToAssign.value.toString(16);
-                    break;
-            }
-            instr = val1[0].id + " " + op.id + " " + numToAssign.value;
-            newVal = numToAssign.value;
-            newVarType = numToAssign.type;
-            resolved = newVal + " assigned to variable \"" + val1[0].id + "\"";
-            break;
-        case "ADD_ASSIGN":
-            tmpOp.id = "+";
-            tmpOp.type = "PLUS";
-            intermediateRes = resolveMath(val1, tmpOp, val2); //perform the + in += as its own atomic operation
-            newVal = intermediateRes.result; //store the result
-            newVarType = intermediateRes.type;
-            instr = val1[0].id + " = " + newVal; //treat the result as the # being assigned
-            resolved = intermediateRes.result + " assigned to variable \"" + val1[0].id + "\"";
-            break;
-        case "SUB_ASSIGN":
-            tmpOp.id = "-";
-            tmpOp.type = "MINUS";
-            intermediateRes = resolveMath(val1, tmpOp, val2);
-            newVal = intermediateRes.result;
-            newVarType = intermediateRes.type;
-            instr = val1[0].id + " = " + newVal;
-            resolved = intermediateRes.result + " assigned to variable " + val1[0].id;
-            break;
-        case "MULT_ASSIGN":
-            tmpOp.id = "*";
-            tmpOp.type = "MULT";
-            intermediateRes = resolveMath(val1, tmpOp, val2);
-            newVal = intermediateRes.result;
-            newVarType = intermediateRes.type;
-            instr = val1[0].id + " = " + newVal;
-            resolved = intermediateRes.result + " assigned to variable \"" + val1[0].id + "\"";
-            break;
-        case "DIV_ASSIGN":
-            tmpOp.id = "/";
-            tmpOp.type = "DIV";
-            intermediateRes = resolveMath(val1, tmpOp, val2);
-            newVal = intermediateRes.result;
-            newVarType = intermediateRes.type;
-            instr = val1[0].id + " = " + newVal;
-            resolved = intermediateRes.result + " assigned to variable \"" + val1[0].id + "\"";
-            break;
-        case "MOD_ASSIGN":
-            tmpOp.id = "%";
-            tmpOp.type = "MOD";
-            intermediateRes = resolveMath(val1, tmpOp, val2);
-            newVal = intermediateRes.result;
-            newVarType = intermediateRes.type;
-            instr = val1[0].id + " = " + newVal;
-            resolved = intermediateRes.result + " assigned to variable \"" + val1[0].id + "\"";
-            break;
-    }
-    if(newVarType === "TRUE" || newVarType === "FALSE" || newVarType === "NONE"){
-        instr = val1[0].id + " = " + newVarType;
-        resolved = newVarType + " assigned to variable \"" + val1[0].id + "\"";
-    }
-    if(val1[0].type === "ID"){ //update the variable that had a nmuber assigned to it
+    if(val1[0].type === "ID"){ //don't even try to assign to none variables
+        var index, newVal, newVarType;
+        let tmpOp = op;
+        //when operating here, always assume val1 is a single index array with an ID token type. Anything else would be a syntax error
+        switch(op.type){
+            case "ASSIGN_EQUALS":
+                var numToAssign = convertTokenToValue(val2); //hex, oct, & bin not always resolved prior in this case
+                switch(numToAssign.type){
+                    case "BINARY": numToAssign.value = "0b" + numToAssign.value.toString(2);
+                        break;
+                    case "OCTAL": numToAssign.value = "0o" + numToAssign.value.toString(8);
+                        break;
+                    case "HEX": numToAssign.value = "0x" + numToAssign.value.toString(16);
+                        break;
+                }
+                instr = val1[0].id + " " + op.id + " " + numToAssign.value;
+                newVal = numToAssign.value;
+                newVarType = numToAssign.type;
+                resolved = newVal + " assigned to variable \"" + val1[0].id + "\"";
+                break;
+            case "ADD_ASSIGN":
+                tmpOp.id = "+";
+                tmpOp.type = "PLUS";
+                intermediateRes = resolveMath(val1, tmpOp, val2); //perform the + in += as its own atomic operation
+                newVal = intermediateRes.result; //store the result
+                newVarType = intermediateRes.type;
+                instr = val1[0].id + " = " + newVal; //treat the result as the # being assigned
+                resolved = intermediateRes.result + " assigned to variable \"" + val1[0].id + "\"";
+                break;
+            case "SUB_ASSIGN":
+                tmpOp.id = "-";
+                tmpOp.type = "MINUS";
+                intermediateRes = resolveMath(val1, tmpOp, val2);
+                newVal = intermediateRes.result;
+                newVarType = intermediateRes.type;
+                instr = val1[0].id + " = " + newVal;
+                resolved = intermediateRes.result + " assigned to variable " + val1[0].id;
+                break;
+            case "MULT_ASSIGN":
+                tmpOp.id = "*";
+                tmpOp.type = "MULT";
+                intermediateRes = resolveMath(val1, tmpOp, val2);
+                newVal = intermediateRes.result;
+                newVarType = intermediateRes.type;
+                instr = val1[0].id + " = " + newVal;
+                resolved = intermediateRes.result + " assigned to variable \"" + val1[0].id + "\"";
+                break;
+            case "DIV_ASSIGN":
+                tmpOp.id = "/";
+                tmpOp.type = "DIV";
+                intermediateRes = resolveMath(val1, tmpOp, val2);
+                newVal = intermediateRes.result;
+                newVarType = intermediateRes.type;
+                instr = val1[0].id + " = " + newVal;
+                resolved = intermediateRes.result + " assigned to variable \"" + val1[0].id + "\"";
+                break;
+            case "MOD_ASSIGN":
+                tmpOp.id = "%";
+                tmpOp.type = "MOD";
+                intermediateRes = resolveMath(val1, tmpOp, val2);
+                newVal = intermediateRes.result;
+                newVarType = intermediateRes.type;
+                instr = val1[0].id + " = " + newVal;
+                resolved = intermediateRes.result + " assigned to variable \"" + val1[0].id + "\"";
+                break;
+        }
+        if(newVarType === "TRUE" || newVarType === "FALSE" || newVarType === "NONE"){
+            instr = val1[0].id + " = " + newVarType;
+            resolved = newVarType + " assigned to variable \"" + val1[0].id + "\"";
+        }
+        //update the variable that had a nmuber assigned to it
         index = varIsDeclared(val1[0].id);
         if(index === -1){//new variable
             //pushVar(vName, vType, vValue, vFuncScope, vIndentScope)
@@ -1299,7 +1300,7 @@ function resolveAssign(val1, op, val2){
             updateVarType(index, newVarType);
         }
     }else{
-        console.log("HERE");
+        console.log(val1[0].type);
         runtime_error("INVALID_ASSIGNMENT");
     }
     pushInstr("Assignment " + instr, " resolved to value " + resolved, cmdCount, lineN, 0);
