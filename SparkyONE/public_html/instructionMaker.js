@@ -4,7 +4,7 @@ var funcList = new Array(); //list of callable functions
 var varList = new Array(); //list of declared variables
 var cmdCount = 1; //this is the instruction on, (instr); or (instr)\n should increment this value
 
-var reservedWord = ["True", "False", "None", "abs", "and", "as", "ascii", "assert", "bin", "bool", "break", "ceil", "chr", "class", "cos", 
+var reservedWords = ["abs", "and", "as", "ascii", "assert", "bin", "bool", "break", "ceil", "chr", "class", "cos", 
     "continue", "def", "del", "elif", "else", "except", "float", "floor", "finally", "for", "from", "global", "hex",
     "if", "import", "in", "input", "int", "is", "lambda", "len", "max", "min", "my_range", "nonlocal", "not", "oct", "or", "ord", "pass", "print",
     "raise", "randint", "random", "range", "return", "round", "seed", "sin", "str", "sqrt", "tan", "try", "type", "while", "with", "xrange", "yield", "format", "input"];
@@ -254,23 +254,23 @@ function createInstrQueue(passedTokens){
                 case "AND":
                 case "OR": tempPriority = 1 + priorityMod;
                     break;
+                case "NOT": tempPriority = 2 + priorityMod;
+                    break;
                 case "COMPARE_EQUALS": //operations can have comparators, for some reason
                 case "LESS_THAN_EQUAL":
                 case "LESS_THAN":
                 case "GREATER_THAN_EQUAL":
                 case "GREATER_THAN":
-                case "NOT_EQUAL": tempPriority = 2 + priorityMod;
+                case "NOT_EQUAL": tempPriority = 3 + priorityMod;
                     break;
                 case "PLUS":
-                case "MINUS": tempPriority = 3 + priorityMod;
+                case "MINUS": tempPriority = 4 + priorityMod;
                     break;
                 case "MULT":
-                case "DIV": tempPriority = 4 + priorityMod;
+                case "DIV": tempPriority = 5 + priorityMod;
                     break;
                 case "MOD":
-                case "EXPONENTIAL": tempPriority = 5 + priorityMod;
-                    break;
-                case "NOT": tempPriority = 6 + priorityMod;
+                case "EXPONENTIAL": tempPriority = 6 + priorityMod;
                     break;
                 case "LPAREN": priorityMod += 10; //all parenthised operations need to be executed before a higher priority external instr.
                     dontQueue = true; //don't push Parens to the Queue
@@ -329,8 +329,12 @@ function createInstrQueue(passedTokens){
                     tempToken = strToken; //replace what gets pushed to queue with the string
                     tempPriority = -1; //this is not an operating token
                     break;
-                default: //ID, number, float, binary, octal, hex
-                    tempPriority = -1;
+                default: //ID, number, float, binary, octal, hex, or built-in
+                    if(reservedWords.includes(passedTokens[x].id)){
+                        tempPriority = 9; //resolve these first
+                    }else{
+                        tempPriority = -1;
+                    }
                     break;
 
             }
@@ -343,6 +347,15 @@ function createInstrQueue(passedTokens){
             }
         }
     }
+        for(var x = 0; x < instrQueue.length; x++){
+            document.getElementById("outputField").value += instrQueue[x].token.id + " ";
+        }
+        document.getElementById("outputField").value += "\n";
+        for(var x = 0; x < instrQueue.length; x++){
+            document.getElementById("outputField").value += instrQueue[x].priority.toString() + " ";
+        }
+        document.getElementById("outputField").value += "\n";
+    
     return instrQueue;
 }
 
@@ -515,7 +528,7 @@ function stepThroughRawInstr(instrQueue){
             resolveQueue(opIndex, instrQueue, resolution, prefixLength, suffixLength); //remove these tokens & replace with ID for the resolution
             
         }else if((mathOps.includes(currentOp.type) || compareOps.includes(currentOp.type) || logicalOps.includes(currentOp.type) || assignOps.includes(currentOp.type))
-                && suffixLength === 0 && currentOp.type !== "NOT"){ //special case of instances like "3-(--(-4))" where it mistakenly sees 3 - N/A
+                && suffixLength === 0 && currentOp.type !== "NOT"){ //special case of instances like "3-(-(-4))" where it mistakenly sees 3 - N/A
             console.log("Case B");
             validOp = true; //this one is just getting the appropriate suffix & can then continue the operation
             hasSuffixLength = false;
@@ -626,6 +639,7 @@ function stepThroughRawInstr(instrQueue){
             validOp = true;
         }
         
+        //standard, non-special case resolutions below
         //perform the operation
         if(validOp){
             if(mathOps.includes(currentOp.type)){ //if the next prioritized operation is math, go to resolve Math
@@ -647,6 +661,9 @@ function stepThroughRawInstr(instrQueue){
                 takeBranch = resolution.result;
             }else if(assignOps.includes(currentOp.type)){ //else it assumed to be an assignment statement
                 resolution = resolveAssign(val1, currentOp, val2);
+            }else if(reservedWords.includes(currentOp.id)){
+                resolution = resolve_built_ins(currentOp, val2);
+                prefixLength = 0; //prefix shouldn't actually be accounted for in this resolution
             }//else if "def"
             
             resolveQueue(opIndex, instrQueue, resolution, prefixLength, suffixLength); //remove these tokens & replace with ID for the resolution
@@ -793,18 +810,10 @@ function resolvePrecedingOperators(resolveToken){ //step by step resolution of "
 function convertTokenToValue(token){
     var value;
     var instr, result, opToken;
-    if(token.length > 1){ //check if it a case of "abs(3)" or "max(1,2,3)"
-        opToken = token[0]; //get general info of the aray of tokens passed
-        let res = resolve_built_ins(token); //resolve the built in & get the resolution id & type for further processing
-        opToken.id = res.result; //update id & type to built in resolution
-        opToken.type = res.type;
-        //console.log("Op Token after built in: " + opToken.id + " " + opToken.type + " " + opToken.line_no);
-    }else{
-        opToken = token[0]; //array of 1, but its simpler to just convert to 1 token
-    }
+    opToken = token[0]; //array of 1, but its simpler to just convert to 1 token
     
     instr = opToken.id;
-    var index;
+    var index, tempHold;
     var isNeg = false;
     if(opToken.id.charAt(0) === "-"){
         isNeg =true;
@@ -813,29 +822,53 @@ function convertTokenToValue(token){
     if(opToken.type === "ID"){
         instr = "\"" + instr + "\""; //when pushing conversion instruction it will read "Value "var" "
         index = varIsDeclared(opToken.id);
+        let printResult;
         if(index !== -1){//not a new variable
             var valueType = getVarType(index);
             if(valueType === "TRUE"){
                 value = 1;
                 result = "True";
+                printResult = result;
             }else if(valueType === "FALSE"){
                 value = 0;
                 result = "False";
+                printResult = result;
             }else if(valueType === "FLOAT"){
                 value = Number.parseFloat(getVarValue(index));
                 result = value;
+                printResult = result;
             }else if(valueType === "STRING"){
                 value = getVarValue(index);
+                printResult = result;
                 result = value;
-            }else{
+            }else if(valueType === "BINARY"){
+                tempHold = getVarValue(index);
+                tempHold = tempHold.slice(2); //remove "0b" before parsing
+                value = Number.parseInt(tempHold, 2);
+                result = value;
+                printResult = "0b" + tempHold;
+            }else if(valueType === "OCTAL"){
+                tempHold = getVarValue(index);
+                tempHold = tempHold.slice(2);
+                value = Number.parseInt(tempHold, 8);
+                result = value;
+                printResult = "0o" + tempHold;
+            }else if(valueType === "HEX"){
+                tempHold = getVarValue(index);
+                tempHold = tempHold.slice(2);
+                value = Number.parseInt(tempHold, 16);
+                result = value;
+                printResult = "0x" + tempHold;
+            }else if(valueType === "NUMBER"){
                 value = Number.parseInt(getVarValue(index), 10);//assumes to be an int at this point
                 result = value;
+                printResult = result;
             }
             opToken.type = valueType;
         }else{//new variable, but it can't be declared here
             runtime_error("UNDECLARED_VAR");
         }
-        pushInstr("Variable " + instr, " is resolved to " + result, cmdCount, opToken.line_no, 0);
+        pushInstr("Variable " + instr, " is resolved to " + printResult, cmdCount, opToken.line_no, 0);
     }else{
         switch(opToken.type){
             case "FLOAT":
@@ -881,11 +914,6 @@ function convertTokenToValue(token){
                 value = opToken.id;
                 break;
         }
-        //push hex, oct, & binary conversion
-        if(opToken.type === "BINARY" || opToken.type === "OCTAL" || opToken.type === "HEX"){ //nothing to really show on that conversion
-            result = value;
-            pushInstr("Value " + instr, " is resolved to " + result, cmdCount, opToken.line_no, 0);
-        }
     }
     var returnVal = {
         value: value,
@@ -927,7 +955,13 @@ function getResultType(token1, operation, token2){
     //boolean operations (such as "==" of "and") are handled in the resolve Method
     var incompatTypes = [];
     if(mathOps.includes(operation.type)){
-        if(type1 === "FLOAT" || type2 === "FLOAT"){
+        if(type1 === "BINARY" && type2 === "BINARY"){
+            resultType = "BINARY";
+        }else if(type1 === "OCTAL" && type2 === "OCTAL"){
+            resultType = "OCTAL";
+        }else if(type1 === "HEX" && type2 === "HEX"){
+            resultType = "HEX";
+        }else if(type1 === "FLOAT" || type2 === "FLOAT"){
             incompatTypes = ["STRING"];
             if(! (incompatTypes.includes(type1) || incompatTypes.includes(type2)) ){ //cannot math op a float & string
                 resultType = "FLOAT";
@@ -995,17 +1029,30 @@ function resolveMath(val1, op, val2){
         resolved = num1 + "" + num2; //num 1 & 2 might be a dated name sake...
     }
     instr = "";
-    if(tokenVal1.type !== "TRUE" && tokenVal1.type !== "FALSE" && tokenVal1.type !== "NONE"){
-        instr += num1 + " ";
+    //if base notation of operation match, return to that notation
+    if(tokenVal1.type === "BINARY" && tokenVal2.type === "BINARY"){
+        resolved = "0b" + resolved.toString(2);
+        instr = "0b" + num1.toString(2) + " " + op.id + " 0b" + num2.toString(2);
+    }else if(tokenVal1.type === "OCTAL" && tokenVal2.type === "OCTAL"){
+        resolved = "0o" + resolved.toString(8);
+        instr = "0o" + num1.toString(8) + " " + op.id + " 0o" + num2.toString(8);
+    }else if(tokenVal1.type === "HEX" && tokenVal2.type === "HEX"){
+        resolved = "0x" + resolved.toString(16);
+        instr = "0x" + num1.toString(16) + " " + op.id + " 0x" + num2.toString(16);
     }else{
-        instr += tokenVal1.type + " ";
+        if(tokenVal1.type !== "TRUE" && tokenVal1.type !== "FALSE" && tokenVal1.type !== "NONE"){
+            instr += num1 + " ";
+        }else{
+            instr += tokenVal1.type + " ";
+        }
+        instr += op.id + " ";
+        if(tokenVal2.type !== "TRUE" && tokenVal2.type !== "FALSE" && tokenVal2.type !== "NONE"){
+            instr += num2 + " ";
+        }else{
+            instr += tokenVal2.type + " ";
+        }
     }
-    instr += op.id + " ";
-    if(tokenVal2.type !== "TRUE" && tokenVal2.type !== "FALSE" && tokenVal2.type !== "NONE"){
-        instr += num2 + " ";
-    }else{
-        instr += tokenVal2.type + " ";
-    }
+    
     //push the math operation performed
     pushInstr("Operation " + instr, " is resolved to " + resolved, cmdCount, lineN, 0);
     var resolution = {
@@ -1110,9 +1157,9 @@ function resolveLogicalOp(val1, op, val2){
         bool1 = bool2; //used to avoid undeclared bool1 error
     if(op.type !== "NOT") //NOT has no operating restrictions under current scope
         var resultType = getResultType(bool1, op, bool2); //best to ensure legal operation
-    //don't need to worry about num1/2 type since the result of this operation should be boolean
     //perform the actual comparison & store it in the instr string
-    if(bool2.type !== "STRING" && bool1.type !== "STRING"){ //simple numeric comparison, important to check bool2 first as bool1 might not be declared if using a not operation
+    if((bool2.type === "TRUE" || bool2.type === "FALSE" || bool2.value === 1 || bool2.value === 0) 
+            && (bool1.type === "TRUE" || bool1.type === "FALSE" || bool1.value === 1 || bool1.value === 0)){ //simple numeric comparison, important to check bool2 first as bool1 might not be declared if using a not operation
         switch(op.type){
             case "AND": instr = "Comparing " + bool1.value + " " + op.id + " " + bool2.value + " ";
                         result = bool1.value && bool2.value; //(0|1) && (0|1)
@@ -1179,10 +1226,18 @@ function resolveAssign(val1, op, val2){
     switch(op.type){
         case "ASSIGN_EQUALS":
             var numToAssign = convertTokenToValue(val2); //hex, oct, & bin not always resolved prior in this case
+            switch(numToAssign.type){
+                case "BINARY": numToAssign.value = "0b" + numToAssign.value.toString(2);
+                    break;
+                case "OCTAL": numToAssign.value = "0o" + numToAssign.value.toString(8);
+                    break;
+                case "HEX": numToAssign.value = "0x" + numToAssign.value.toString(16);
+                    break;
+            }
             instr = val1[0].id + " " + op.id + " " + numToAssign.value;
             newVal = numToAssign.value;
             newVarType = numToAssign.type;
-            resolved = numToAssign.value + " assigned to variable \"" + val1[0].id + "\"";
+            resolved = newVal + " assigned to variable \"" + val1[0].id + "\"";
             break;
         case "ADD_ASSIGN":
             tmpOp.id = "+";
@@ -1244,6 +1299,7 @@ function resolveAssign(val1, op, val2){
             updateVarType(index, newVarType);
         }
     }else{
+        console.log("HERE");
         runtime_error("INVALID_ASSIGNMENT");
     }
     pushInstr("Assignment " + instr, " resolved to value " + resolved, cmdCount, lineN, 0);
@@ -1281,16 +1337,450 @@ function resolve_abs(token) //this gets passed a single token for operation
     return resolution;
 }
 
-function resolve_built_ins(token)
+function resolve_bin(token)
+{
+    var tokenVal = convertTokenToValue(token).value;
+    var newVal = "test";
+    
+    if (tokenVal < 0)
+    {
+        tokenVal = tokenVal.toString(2);
+        newVal = tokenVal.slice(0,1) + "0b" + tokenVal.slice(1);
+    }
+
+    else
+    {
+        newVal = "0b" + tokenVal.toString(2);
+    }
+    pushInstr("bin(" + token[0].id + ") ", "resolves to " + newVal + "", cmdCount, 0, 0);
+    
+    var resolution = {
+        result: newVal + "",
+        type: "BINARY"
+    };
+    
+    return resolution;
+}
+
+function resolve_bool(token)
+{  
+    if (token !== null)
+    {
+        var tokenVal = resolve_value_True_or_False(token);  
+        if (tokenVal)
+        {
+            var resolution = {
+                result: "True",
+                type: "TRUE"
+            };
+
+            pushInstr("bool(" + token[0].id + ") ", "resolves to True", cmdCount, 0, 0);
+            return resolution;
+        }
+
+        else
+        {
+            var resolution = {
+                result: "False",
+                type: "FALSE"
+            };
+
+            pushInstr("bool(" + token[0].id + ") ", "resolves to False", cmdCount, 0, 0);
+            return resolution;
+        }
+    }
+    
+    else
+    {
+        var resolution = {
+            result: "False",
+            type: "FALSE"
+        };
+        pushInstr("bool(" + token[0].id + ") ", "resolves to False", cmdCount, 0, 0);
+        return resolution;
+    }
+}
+
+function resolve_chr(token)
+{
+    var tokenVal = convertTokenToValue(token).value;
+    var newVal = String.fromCharCode(tokenVal);
+    
+    var resolution = {
+        result: newVal + "",
+        type: "STRING"
+    };
+    
+    pushInstr("chr(" + token[0].id + ") ", "resolves to " + newVal, cmdCount, 0, 0);
+    return resolution;
+}
+
+function resolve_float(token)
+{
+    var tokenVal = convertTokenToValue(token).value;
+    
+    if (Number.isInteger(tokenVal))
+    {
+        var newVal = tokenVal + ".0";
+        
+        var resolution = {
+            result: newVal + "",
+            type: "FLOAT"
+        };
+        pushInstr("float(" + token[0].id + ") ", "resolves to " + newVal + "", cmdCount, 0, 0);
+        
+        return resolution;
+    }
+    
+    else if (Number.isFloat(tokenVal))
+    {
+        var newVal = tokenVal;
+        
+        var resolution = {
+            result: newVal + "",
+            type: "FLOAT"
+        };
+        pushInstr("float(" + token[0].id + ") ", "resolves to "+ newVal + "", cmdCount, 0, 0);
+        
+        return resolution;
+    }
+    
+    else if (tokenVal === "Infinity")
+    {
+        var newVal = tokenVal;
+        
+        var resolution = {
+            result: "inf",
+            type: "FLOAT"
+        };
+        pushInstr("float(" + token[0].id + ") ", "resolves to inf", cmdCount, 0, 0);
+        
+        return resolution;
+    }
+    
+    else if (tokenVal === "-Infinity")
+    { 
+        var resolution = {
+            result: "-inf",
+            type: "FLOAT"
+        };
+        pushInstr("float(" + token[0].id + ") ", "resolves to -inf", cmdCount, 0, 0);
+        
+        return resolution;
+    }
+    
+    else
+    {
+        var resolution = {
+            result: "Unknown",
+            type: "ERROR"
+        };
+        pushInstr("float(" + token[0].id + ") ", "resolves to Unknown", cmdCount, 0, 0);
+        
+        return resolution;
+    }
+}
+
+function resolve_hex(token)
+{
+    var tokenVal = convertTokenToValue(token).value;
+    
+    if (tokenVal < 0)
+    {
+        tokenVal = tokenVal.toString(16);
+        var newVal = tokenVal.slice(0,1) + "0x" + tokenVal.slice(1);
+        
+        pushInstr("hex(" + token[0].id + ") ", "resolves to "+ newVal, cmdCount, 0, 0);
+    }
+
+    else
+    {
+        var newVal = "0x" + tokenVal.toString(16);
+        
+        pushInstr("hex(" + token[0].id + ") ", "resolves to "+ newVal, cmdCount, 0, 0);
+    }
+    
+    var resolution = {
+        result: newVal + "",
+        type: "HEX"
+    };
+    
+    return resolution;
+}
+
+function resolve_len(token)
+{
+    var temp = convertTokenToValue(token);
+    var tokenVal = temp.value;
+    var tokenType = temp.type;
+    if (tokenType === "STRING")
+    {
+        var newVal = tokenVal.length;
+        var resolution = {
+            result: newVal + "",
+            type: "NUMBER"
+        };
+        
+        pushInstr("len(" + token[0].id + ") ", "resolves to "+ newVal + "", cmdCount, 0, 0);  
+    }
+    
+    else
+    {       
+        var resolution = {
+            result: "Unknown",
+            type: "ERROR"
+        };        
+        
+        pushInstr("len(" + token[0].id + ") ", "resolves to Unknown", cmdCount, 0, 0);  
+    }
+        
+    return resolution;   
+}
+
+function resolve_oct(token)
+{
+    var tokenVal = convertTokenToValue(token).value;
+    
+    if (tokenVal < 0)
+    {
+        tokenVal = tokenVal.toString(8);
+        var newVal = tokenVal.slice(0,1) + "0o" + tokenVal.slice(1);
+        
+        pushInstr("oct(" + token[0].id + ") ", "resolves to "+ newVal, cmdCount, 0, 0);
+    }
+
+    else
+    {
+        var newVal = "0o" + tokenVal.toString(8);
+        
+        pushInstr("oct(" + token[0].id + ") ", "resolves to "+ newVal, cmdCount, 0, 0);
+    }
+ 
+    var resolution = {
+        result: newVal + "",
+        type: "OCTAL"
+    };
+    
+    return resolution;
+}
+
+function resolve_ord(token)
+{
+    var tokenID = convertTokenToValue(token).value;
+    
+    if ((typeof tokenID === "string") && (tokenID.length === 1))
+    {
+        var newVal = tokenID.charCodeAt();
+        
+        var resolution = {
+            result: newVal + "",
+            type: "NUMBER"
+        }; 
+        
+        pushInstr("ord(" + token[0].id + ") ", "resolves to "+ newVal + "", cmdCount, 0, 0);
+    }
+    
+    else
+    {       
+        var resolution = {
+            result: "Unknown",
+            type: "ERROR"
+        };        
+        
+        pushInstr("ord(" + token[0].id + ") ", "resolves to Unknown", cmdCount, 0, 0);
+    }
+    
+    return resolution; 
+}
+
+function resolve_str(token)
+{
+    var tokenVal = convertTokenToValue(token).value;
+    
+    var newVal = tokenVal.toString();
+    
+    var resolution = {
+        result: newVal,
+        type: "STRING"
+    }; 
+    
+    pushInstr("str(" + token[0].id + ") ", "resolves to "+ newVal, cmdCount, 0, 0);
+    
+    return resolution;
+}
+
+function resolve_type(token)
+{
+    var tokenVal = convertTokenToValue(token).value;
+    
+    var newVal = typeof tokenVal;
+    
+    var resolution = {
+        result: newVal,
+        type: "STRING"
+    }; 
+  
+    pushInstr("type(" + token[0].id + ") ", "resolves to "+ newVal, cmdCount, 0, 0);
+    
+    return resolution;
+}
+
+function resolve_ceil(token)
+{
+    var tokenVal = convertTokenToValue(token).value;
+    var resolution;
+    console.log(tokenVal);
+    if (Number.isInteger(tokenVal) /*|| Number.isFloat(tokenVal)*/)
+    {
+        var newVal = Math.ceil(tokenVal);
+        
+        pushInstr("ceil(" + token[0].id + ") ", "resolves to " +newVal, cmdCount, 0, 0);
+        
+        resolution = {
+            result: newVal + "",
+            type: "NUMBER"
+        };        
+    }
+    
+    else
+    {
+        pushInstr("ceil(" + token[0].id + ") ", "resolves to unknown", cmdCount, 0, 0);
+         resolution = {
+            result: "Unknown",
+            type: "ID"
+        };       
+    }
+       
+    
+    
+    return resolution;
+}
+
+function resolve_floor(token)
+{
+    var tokenVal = convertTokenToValue(token).value;
+    
+    if (Number.isInteger(tokenVal) || Number.isFloat(tokenVal))
+    {
+        var newVal = Math.ceil(tokenVal);
+        
+        pushInstr("floor(" + token[0].id + ") ", "resolves to " + newVal, cmdCount, 0, 0);
+        var resolution = {
+            result: newVal + "",
+            type: "NUMBER"
+        };        
+    }
+    
+    else
+    {
+        pushInstr("floor(" + token[0].id + ") ", "resolves to unknown", cmdCount, 0, 0);
+        var resolution = {
+            result: "Unknown",
+            type: "ID"
+        };       
+    }
+       
+    
+    return resolution;
+}
+
+function resolve_sqrt(token)
+{
+    var tokenVal = convertTokenToValue(token).value;
+    
+    var newVal = Math.sqrt(tokenVal);
+    var resolution = {
+        result: newVal + "",
+        type: "FLOAT"
+    };
+    
+    pushInstr("sqrt(" + token[0].id + ") ", "resolves to " +newVal, cmdCount, 0, 0);
+    return resolution;
+}
+
+function resolve_cos(token)
+{
+    var tokenVal = convertTokenToValue(token).value;
+    
+    var newVal = Math.cos(tokenVal);
+    
+    var resolution = {
+        result: newVal + "",
+        type: "FLOAT"
+    };    
+    
+    pushInstr("cos(" + token[0].id + ") ", "resolves to " + newVal, cmdCount, 0, 0);
+    return resolution;
+}
+
+function resolve_sin(token)
+{
+    var tokenVal = convertTokenToValue(token).value;
+    
+    var newVal = Math.sin(tokenVal);
+    
+    var resolution = {
+        result: newVal + "",
+        type: "FLOAT"
+    };    
+    
+    pushInstr("sin(" + token[0].id + ") ", "resolves to " +newVal, cmdCount, 0, 0);
+    return resolution;   
+}
+
+function resolve_built_ins(opToken, tokenList)
 {
     var res;
-    var operationTokens = [];
-    for(var x = 1; x < token.length; x++)
-        operationTokens.push(token[x]);
     
-    switch (token[0].id){
+    switch (opToken.id){
         case "abs":
-            res = resolve_abs(operationTokens);
+            res = resolve_abs(tokenList);
+            break;
+        case "bin":
+            res = resolve_bin(tokenList);
+            break;
+        case "bool":
+            res = resolve_bool(tokenList);
+            break;
+        case "chr":
+            res = resolve_chr(tokenList);
+            break;
+        case "float":
+            res = resolve_float(tokenList);
+            break;
+        case "hex":
+            res = resolve_hex(tokenList);
+            break;
+        case "len":
+            res = resolve_len(tokenList);
+            break;
+        case "oct":
+            res = resolve_oct(tokenList);
+            break;
+        case "ord":
+            res = resolve_ord(tokenList);
+            break;
+        case "str":
+            res = resolve_str(tokenList);
+            break;
+        case "type":
+            res = resolve_type(tokenList);
+            break;
+        case "ceil":
+            res = resolve_ceil(tokenList);
+            break;
+        case "floor":
+            res = resolve_floor(tokenList);
+            break;
+        case "sqrt":
+            res = resolve_sqrt(tokenList);
+            break;
+        case "cos":
+            res = resolve_cos(tokenList);
+            break;
+        case "sin":
+            res = resolve_sin(tokenList);
+            break;
     }
     
     return res;
