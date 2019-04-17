@@ -5,8 +5,6 @@
 <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         
-
-
 <style>
 body {
     background-color: lightblue;
@@ -20,18 +18,12 @@ p {
     font-size: 20px;
 }
 </style>
-
 </head>
-
 <body>
-
 <center><h1>SparkyOne</h1>
 <p>Python online editor</p>
-
 <HR style="FILTER: alpha(opacity=100,finishopacity=0,style=3)" width="80%" color=#987cb9 SIZE=2>
-
-
-<textarea name = "code" cols="70" rows="40" placeholder="Enter your code here..." id="inputField">
+<textarea name = "code" cols="70" rows="40" placeholder="Enter your code here..." id="inputField"onkeydown="insertTab(this, event);">
 </textarea>
 
 
@@ -42,8 +34,37 @@ p {
 <script src = "parser.js"></script>
 <script src = "instructionMaker.js"></script>
 
+<script>
+    function insertTab(o, e)
+{   
+  var kC = e.keyCode ? e.keyCode : e.charCode ? e.charCode : e.which;
+  if (kC == 9 && !e.shiftKey && !e.ctrlKey && !e.altKey)
+  {
+    var oS = o.scrollTop;
+    if (o.setSelectionRange)
+    {
+      var sS = o.selectionStart;  
+      var sE = o.selectionEnd;
+      o.value = o.value.substring(0, sS) + "\t" + o.value.substr(sE);
+      o.setSelectionRange(sS + 1, sS + 1);
+      o.focus();
+    }
+    else if (o.createTextRange)
+    {
+      document.selection.createRange().text = "\t";
+      e.returnValue = false;
+    }
+    o.scrollTop = oS;
+    if (e.preventDefault)
+    {
+      e.preventDefault();
+    }
+    return false;
+  }
+  return true;
+}
+</script>
+
 <textarea name = "code" cols="70" rows="40" placeholder="output area." id="outputField">
 </textarea>
-
-
 </html>
