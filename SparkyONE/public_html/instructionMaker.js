@@ -212,6 +212,33 @@ function create_instructions(input){
                     order_cust_function(lineTokens, input);
                 lineTokens = [];
                 break;
+            case "PRINT":
+                let isQuote = false;
+                let isApost = false;
+                openParenCount = 0;
+                openParenCount = 0;
+                while(!lineEnds.includes(lexeme.type) || openParenCount !== 0){ //a line can be "a = ( 6 + \n 6) a still be treated as a single instruction
+                    lexeme = getToken(input, true);
+                    if(!lineEnds.includes(lexeme.type)){ //don't push a line end token to the list getting resolved, but it will be sliced
+                        instr_line += lexeme.id + " ";
+                        appendTokenList(lexeme);
+                        if(!isApost && lexeme.type === "QUOTE")
+                            isQuote = !isQuote;
+                        if(!isQuote && lexeme.type === "APOSTROPHE")
+                            isApost = !isApost;
+                        if(!isApost && !isQuote){
+                            if(lexeme.type === "LPAREN")
+                                openParenCount++;
+                            if(lexeme.type === "RPAREN")
+                                openParenCount--;
+                        }
+                    }
+                    input = input.slice(lexeme.length);
+                }
+                pushInstr("Instruction" + instr_line, "", cmdCount, lexeme.line_no, 0); //this pushes the line being resolved before actualy step wise resolution
+                order_print_statement(lineTokens);
+                lineTokens = [];
+                break;
             case "SEMICOLON": //usually sliced at end of instruction lnie, this catches ";;"
             case "SPACE":
             case "END_OF_LINE": input = skipEmptyLines(input);
@@ -232,12 +259,15 @@ function createInstrQueue(passedTokens){
     var tempToken;
     var tempPriority;
     var dontQueue = false;
+    var printComma = false;
+    var functionParenScope = 0;
     for(var x = 0; x < passedTokens.length; x++){ //add passed tokens to instruction queue & priority
         if(passedTokens[x].type !== "SPACE"){
             tempToken = passedTokens[x];
             dontQueue = false;
             let strToken; //holder if a string token is found
             switch(passedTokens[x].type){//used to assign priority
+                case "PRINT": printComma = true;
                 case "DEF":
                 case "IF":
                 case "ELIF":
@@ -251,6 +281,7 @@ function createInstrQueue(passedTokens){
                 case "ASSIGN_EQUALS": tempPriority = 0 + priorityMod;
                     priorityMod++; //assigns need to be read right to left, so we increment priority mod for each type assign
                     break;
+                case "FORMAT":
                 case "AND":
                 case "OR": tempPriority = 1 + priorityMod;
                     break;
@@ -273,13 +304,24 @@ function createInstrQueue(passedTokens){
                 case "EXPONENTIAL": tempPriority = 6 + priorityMod;
                     break;
                 case "LPAREN": priorityMod += 10; //all parenthised operations need to be executed before a higher priority external instr.
+                    if(!printComma)
+                        functionParenScope++; //count the # of "max( 2, (( 3+4..."
                     dontQueue = true; //don't push Parens to the Queue
                     break;
                 case "RPAREN": priorityMod -= 10;
+                    if(!printComma)
+                        functionParenScope--;
+                    if(functionParenScope === 0)
+                        printComma = true;
                     dontQueue = true;
                     break;
-                case "COMMA": dontQueue = true; //function will have commas, but we dont really care, ex. max(1,2,3)
+                case "COMMA": 
+                    if(!printComma) //only queue the commas dividing pritn segments
+                        dontQueue = true; //function will have commas, but we dont really care, ex. max(1,2,3)
+                    else
+                        tempPriority = 0;
                     break;
+                case "PERIOD":
                 case "COLON": //this should be passed, but it does'nt need to be queued
                 case "SEMICOLON": //these shouldn't be passed at all, but we want to really avoid treating them as instr. by this point
                 case "END_OF_LINE":
@@ -331,7 +373,8 @@ function createInstrQueue(passedTokens){
                     break;
                 default: //ID, number, float, binary, octal, hex, or built-in
                     if(reservedWords.includes(passedTokens[x].id)){
-                        tempPriority = 9; //resolve these first
+                        tempPriority = 9 + priorityMod; //resolve these first
+                        printComma = false;
                     }else{
                         tempPriority = -1;
                     }
@@ -409,277 +452,287 @@ function stepThroughRawInstr(instrQueue){
     var assignOps = ["ADD_ASSIGN", "SUB_ASSIGN", "MULT_ASSIGN", "DIV_ASSIGN", "MOD_ASSIGN", "ASSIGN_EQUALS"];
     var branchOps = ["WHILE", "IF", "ELIF"];
     var numTypes = ["FLOAT", "NUMBER"];
-    while(instrQueue.length > 1 || instrQueue[0].token.type === "ELSE"){ //assignments should resolve down to a single vlaue remaining (and it is what was assigned to a variable)
-        // get the tokens operated on
-        //get the next priority operation
-        opIndex = priorityPop(instrQueue);
-        currentOp = instrQueue[opIndex].token;
-        
-        val1 = []; //reset these to help catch errors
-        val2 = [];
-        prefixLength = suffixLength = 0; //reset these lengths
-        hasPrefixLength = hasSuffixLength = false;
-        validOp = false;
-        //get all tokens before this operation pertaining to its execution
-        tmpIndex = opIndex - 1; //go 1 to the left in the instrQueue
-        //console.log("OP " + instrQueue[opIndex].token.id);
-        //console.log("Prefix " +tmpIndex + " & " + prefixLength);
-        while(!hasPrefixLength){ //skims backwards to get the start index & length of val 1
-            if(tmpIndex > -1 && instrQueue[tmpIndex].priority === -1){ //stay in array bounds & don't look at operations
-                prefixLength++; //looked at token is part of prefix
-                val1.unshift(instrQueue[tmpIndex].token); //push this token to head of val1 array
-                tmpIndex--; //decrement to next token in instrQueue
-            }else{ //has reached end of instrQueue or preceding operation
-                hasPrefixLength = true;
-                tmpIndex++; //increment back up to last valid token in the prefix
-            }
-        }
-        //console.log("Prefix " +tmpIndex + " & " + prefixLength);
-        /*for(var y = 0; y < prefixLength; y++)
-            console.log(val1[y].id);*/
-        
-        if(prefixLength !== 0){
-            //resolve any preceding negatives on these value
-            for(let y = 0; y < prefixLength; y++){ //iterate the operated tokens & resolve any strings of "--+-" before a value
-                if(val1[y].id.charAt(0) === "+" || val1[y].id.charAt(0) === "-"){
-                    let newVal = resolvePrecedingOperators(val1[y]); //pass token, return string to update the value
-                    val1[y].id = newVal;
-                }
-            }
-        }
-        
-        //get all tokens after the operation pertaining to its execution
-        tmpIndex = opIndex + 1;
-        //console.log("Suffix " +tmpIndex + " & " + suffixLength);
-        while(!hasSuffixLength){
-            if(tmpIndex < instrQueue.length && instrQueue[tmpIndex].priority === -1){//still in instrQueue bounds & looking at non-operator tokens
-                suffixLength++;
-                val2.push(instrQueue[tmpIndex].token); //push this new token to val2 list
-                tmpIndex++;
-            }else{
-                hasSuffixLength = true;
-                tmpIndex--; //decrement back to last valid token
-            }
-        }
-        //console.log("Suffix " +tmpIndex + " & " + suffixLength);
-        /*for(var y = 0; y < suffixLength; y++)
-            console.log(val2[y].id);*/
-        
-        if(suffixLength !== 0){
-            //resolve preceding operations on the token
-            for(let y = 0; y < suffixLength; y++){ //iterate through the suffix and resolve preceding "--+-" strings
-                if(val2[y].id.charAt(0) === "+" || val2[y].id.charAt(0) === "-"){
-                    let newVal = resolvePrecedingOperators(val2[y]); //pass token, return string to update the value
-                    val2[y].id = newVal;
-                }
-            }
-        }
-        
-        if((currentOp.type === "PLUS" || currentOp.type === "MINUS") && suffixLength === 0 && prefixLength === 0){ //special case of instance like "-(--(4))" where it is mistakenly seeing N/A - N/A
-            //we need to resolve the instrQueue to account for incorrect - & + before a number
-            console.log("Case A");
-            validOp = false; //we are going to do some hands on changes that can't be sent to functions to do actual operations
+    if(instrQueue[0].token.type !=="ELSE"){
+        while(instrQueue.length > 1){ //assignments should resolve down to a single vlaue remaining (and it is what was assigned to a variable)
+            // get the tokens operated on
+            //get the next priority operation
+            opIndex = priorityPop(instrQueue);
+            currentOp = instrQueue[opIndex].token;
+
+            val1 = []; //reset these to help catch errors
+            val2 = [];
+            prefixLength = suffixLength = 0; //reset these lengths
             hasPrefixLength = hasSuffixLength = false;
-            let precedeOp = ["+","-"];
-            let unassignedOps = currentOp.id + ""; //these will be concat to the front of the next id/number token
-            tmpIndex = opIndex + 1;
-            while(!hasSuffixLength){ //retiterate over tokens after op token
-                if(tmpIndex < instrQueue.length){
-                    if(precedeOp.includes(instrQueue[tmpIndex].token.id)){//found another +/-
-                        suffixLength++;
-                        unassignedOps += instrQueue[tmpIndex].token.id;
-                        tmpIndex++;
-                    }else if(instrQueue[tmpIndex].priority === -1){//found correct suffix op
-                        suffixLength++;
-                        val2.push(instrQueue[tmpIndex].token); //push this new token to val2 list
-                        tmpIndex++;
-                    }else{ //if niether, end of potential suffix
-                        hasSuffixLength = true;
-                        tmpIndex--; //decrement back to last valid token
-                    }
-                }else{ //outside the length of the queue
-                    hasSuffixLength = true;
-                    tmpIndex--; //return to last legal index
-                }
-            }
-            let newToken;
-            if(suffixLength > 0){
-                if(numTypes.includes(val2[0].type)){ //this checks if the new suffix is a token like "--2"
-                    //in which case it isn't a built in function and we can append the missing +/- to the head and resolve
-                    val2[0].id = unassignedOps + "" + val2[0].id;
-                    val2[0].id = resolvePrecedingOperators(val2[0]);
-                    newToken = convertTokenToValue(val2); //convert result to get resolution fields
-                }else{ //not a simple float or number, needs to be converted
-                    newToken = convertTokenToValue(val2); //convert the token to a number (could be 0b10 or even abs(2))
-                    let tmpToken = getToken(newToken.value + "", false); //convert that return to a token
-                    val2 = [];
-                    val2.push(tmpToken); //push this token val2
-                    val2[0].id = unassignedOps + "" + val2[0].id; //resolve it like a number now
-                    val2[0].id = resolvePrecedingOperators(val2[0]);
-                    newToken = convertTokenToValue(val2);
-                }
-            }//else error detected
-            
-            var resolution = {
-                result: newToken.value + "",
-                type: newToken.type
-            };
-            
-            resolveQueue(opIndex, instrQueue, resolution, prefixLength, suffixLength); //remove these tokens & replace with ID for the resolution
-            
-        }else if((mathOps.includes(currentOp.type) || compareOps.includes(currentOp.type) || logicalOps.includes(currentOp.type) || assignOps.includes(currentOp.type))
-                && suffixLength === 0 && currentOp.type !== "NOT"){ //special case of instances like "3-(-(-4))" where it mistakenly sees 3 - N/A
-            console.log("Case B");
-            validOp = true; //this one is just getting the appropriate suffix & can then continue the operation
-            hasSuffixLength = false;
-            let precedeOp = ["+","-"];
-            let unassignedOps = ""; //these will be concat to the front of the next id/number token
-            tmpIndex = opIndex + 1;
-            console.log(currentOp.type);
-            while(!hasSuffixLength){ //retiterate over tokens after op token
-                if(tmpIndex < instrQueue.length){
-                    if(precedeOp.includes(instrQueue[tmpIndex].token.id)){//found another +/-
-                        suffixLength++;
-                        unassignedOps += instrQueue[tmpIndex].token.id;
-                        tmpIndex++;
-                    }else if(instrQueue[tmpIndex].priority === -1){//found correct suffix op
-                        suffixLength++;
-                        val2.push(instrQueue[tmpIndex].token); //push this new token to val2 list
-                        tmpIndex++;
-                    }else{ //if niether, end of potential suffix
-                        hasSuffixLength = true;
-                        tmpIndex--; //decrement back to last valid token
-                    }
-                }else{ //outside the length of the queue
-                    hasSuffixLength = true;
-                    tmpIndex--; //return to last legal index
-                }
-            }
-            let newToken, tmpToken;
-            let isNeg = false;
-            if(suffixLength > 0){
-                if(numTypes.includes(val2[0].type)){ //this checks if the new suffix is a token like "--2"
-                    //in which case it isn't a built in function and we can append the missing +/- to the head and resolve
-                    val2[0].id = unassignedOps + "" + val2[0].id;
-                    val2[0].id = resolvePrecedingOperators(val2[0]);
-                    if(val2[0].id.charAt(0) === "-"){
-                        val2[0].id = val2[0].id.slice(1,val2[0].id.length); //if the "-" is left on it will return the wrong token in the next step
-                        isNeg = true;
-                    }
-                    tmpToken = convertTokenToValue(val2);
-                    newToken = getToken(tmpToken.value + "", false); //convert result to a token since we proceed with operation after this conversion
-                }else{ //not a simple float or number, needs to be converted
-                    newToken = convertTokenToValue(val2); //convert the token to a number (could be 0b10 or even abs(2))
-                    let tmpToken = getToken(newToken.value + "", false); //convert that return to a token
-                    val2 = [];
-                    val2.push(tmpToken); //push this token val2
-                    val2[0].id = unassignedOps + "" + val2[0].id; //resolve it like a number now
-                    val2[0].id = resolvePrecedingOperators(val2[0]);
-                    if(val2[0].id.charAt(0) === "-"){
-                        val2[0].id = val2[0].id.slice(1,val2[0].id.length); //if the "-" is left on it will return the wrong token in the next step
-                        isNeg = true;
-                    }
-                    tmpToken = convertTokenToValue(val2);
-                    newToken = getToken(tmpToken.value + "", false);
-                }
-            }//else error detected
-            if(isNeg) //return any "-" that was sliced off
-                newToken.id = "-" + newToken.id;
-            val2 = []; //clear the val2 array
-            val2.push(newToken); //push the new token genrated
-            
-        }else if((currentOp.type === "PLUS" || currentOp.type === "MINUS") && prefixLength === 0){ //instance where it reads something like "a = -(2)" and tries N/A - 2
-            console.log("Case C");
             validOp = false;
-            let precedeOp = ["+","-"];
-            let unassignedOps = currentOp.id + "";
-            let newToken;
-            if(suffixLength > 0){
-                if(numTypes.includes(val2[0].type)){ //this checks if the new suffix is a token like "--2"
-                    //in which case it isn't a built in function and we can append the missing +/- to the head and resolve
-                    val2[0].id = unassignedOps + "" + val2[0].id;
-                    val2[0].id = resolvePrecedingOperators(val2[0]);
-                    newToken = convertTokenToValue(val2); //convert result to get resolution fields
-                }else{ //not a simple float or number, needs to be converted
-                    newToken = convertTokenToValue(val2); //convert the token to a number (could be 0b10 or even abs(2))
-                    let tmpToken = getToken(newToken.value + "", false); //convert that return to a token
-                    val2 = [];
-                    val2.push(tmpToken); //push this token val2
-                    val2[0].id = unassignedOps + "" + val2[0].id; //resolve it like a number now
-                    val2[0].id = resolvePrecedingOperators(val2[0]);
-                    newToken = convertTokenToValue(val2);
-                }
-            }//else error detected
-            
-            var resolution = {
-                result: newToken.value + "",
-                type: newToken.type
-            };
-            
-            resolveQueue(opIndex, instrQueue, resolution, prefixLength, suffixLength); //remove these tokens & replace with ID for the resolution
-        
-        }else if(currentOp.type === "NOT" && suffixLength === 0){ //for sequences of "not not not ..."
-            //this will be a sliding method, we know there is a string of nots and something to operate on at some point to the right,
-            //we will slide the opIndex over to the not just before that value & increase its priority without doing a resolution, so on next iteration
-            //the right most not will be resolved first
-            let tempIndex = opIndex + 1;
-            let hasOpIndex = false;
-            while(!hasOpIndex && tempIndex < instrQueue.length){
-                if(instrQueue[tempIndex].priority !== -1){
-                    tempIndex++; //just another not
-                }else{
-                    hasOpIndex = true;
-                    tempIndex--; //got back to preceding not
+            //get all tokens before this operation pertaining to its execution
+            tmpIndex = opIndex - 1; //go 1 to the left in the instrQueue
+            //console.log("OP " + instrQueue[opIndex].token.id);
+            //console.log("Prefix " +tmpIndex + " & " + prefixLength);
+            while(!hasPrefixLength){ //skims backwards to get the start index & length of val 1
+                if(tmpIndex > -1 && instrQueue[tmpIndex].priority === -1){ //stay in array bounds & don't look at operations
+                    prefixLength++; //looked at token is part of prefix
+                    val1.unshift(instrQueue[tmpIndex].token); //push this token to head of val1 array
+                    tmpIndex--; //decrement to next token in instrQueue
+                }else{ //has reached end of instrQueue or preceding operation
+                    hasPrefixLength = true;
+                    tmpIndex++; //increment back up to last valid token in the prefix
                 }
             }
-            opIndex = tempIndex;
-            instrQueue[opIndex].priority++;
-            
-        }else{ //there was a prefix or suffix to perform the operation upon
-            validOp = true;
-        }
-        
-        //standard, non-special case resolutions below
-        //perform the operation
-        if(validOp){
-            if(mathOps.includes(currentOp.type)){ //if the next prioritized operation is math, go to resolve Math
-                resolution = resolveMath(val1, currentOp, val2);
-            }else if(compareOps.includes(currentOp.type)){ //check if it is a comparator
-                resolution = resolveCompare(val1, currentOp, val2);
-            }else if(logicalOps.includes(currentOp.type)){
-                resolution = resolveLogicalOp(val1, currentOp, val2);
-                if(currentOp.type === "NOT")
-                    prefixLength = 0; //even if a valid token was in front of "not" it didn't actually perform in this operation
-            }else if(branchOps.includes(currentOp.type)){
-                resolution = resolve_value_True_or_False(val2);
-                takeBranch = resolution.result;
-            }else if(currentOp.type === "ELSE"){
+            //console.log("Prefix " +tmpIndex + " & " + prefixLength);
+            /*for(var y = 0; y < prefixLength; y++)
+                console.log(val1[y].id);*/
+
+            if(prefixLength !== 0){
+                //resolve any preceding negatives on these value
+                for(let y = 0; y < prefixLength; y++){ //iterate the operated tokens & resolve any strings of "--+-" before a value
+                    if(val1[y].id.charAt(0) === "+" || val1[y].id.charAt(0) === "-"){
+                        let newVal = resolvePrecedingOperators(val1[y]); //pass token, return string to update the value
+                        val1[y].id = newVal;
+                    }
+                }
+            }
+
+            //get all tokens after the operation pertaining to its execution
+            tmpIndex = opIndex + 1;
+            //console.log("Suffix " +tmpIndex + " & " + suffixLength);
+            while(!hasSuffixLength){
+                if(tmpIndex < instrQueue.length && instrQueue[tmpIndex].priority === -1){//still in instrQueue bounds & looking at non-operator tokens
+                    suffixLength++;
+                    val2.push(instrQueue[tmpIndex].token); //push this new token to val2 list
+                    tmpIndex++;
+                }else{
+                    hasSuffixLength = true;
+                    tmpIndex--; //decrement back to last valid token
+                }
+            }
+            //console.log("Suffix " +tmpIndex + " & " + suffixLength);
+            /*for(var y = 0; y < suffixLength; y++)
+                console.log(val2[y].id);*/
+
+            if(suffixLength !== 0){
+                //resolve preceding operations on the token
+                for(let y = 0; y < suffixLength; y++){ //iterate through the suffix and resolve preceding "--+-" strings
+                    if(val2[y].id.charAt(0) === "+" || val2[y].id.charAt(0) === "-"){
+                        let newVal = resolvePrecedingOperators(val2[y]); //pass token, return string to update the value
+                        val2[y].id = newVal;
+                    }
+                }
+            }
+
+            if((currentOp.type === "PLUS" || currentOp.type === "MINUS") && suffixLength === 0 && prefixLength === 0){ //special case of instance like "-(--(4))" where it is mistakenly seeing N/A - N/A
+                //we need to resolve the instrQueue to account for incorrect - & + before a number
+                console.log("Case A");
+                validOp = false; //we are going to do some hands on changes that can't be sent to functions to do actual operations
+                hasPrefixLength = hasSuffixLength = false;
+                let precedeOp = ["+","-"];
+                let unassignedOps = currentOp.id + ""; //these will be concat to the front of the next id/number token
+                tmpIndex = opIndex + 1;
+                while(!hasSuffixLength){ //retiterate over tokens after op token
+                    if(tmpIndex < instrQueue.length){
+                        if(precedeOp.includes(instrQueue[tmpIndex].token.id)){//found another +/-
+                            suffixLength++;
+                            unassignedOps += instrQueue[tmpIndex].token.id;
+                            tmpIndex++;
+                        }else if(instrQueue[tmpIndex].priority === -1){//found correct suffix op
+                            suffixLength++;
+                            val2.push(instrQueue[tmpIndex].token); //push this new token to val2 list
+                            tmpIndex++;
+                        }else{ //if niether, end of potential suffix
+                            hasSuffixLength = true;
+                            tmpIndex--; //decrement back to last valid token
+                        }
+                    }else{ //outside the length of the queue
+                        hasSuffixLength = true;
+                        tmpIndex--; //return to last legal index
+                    }
+                }
+                let newToken;
+                if(suffixLength > 0){
+                    if(numTypes.includes(val2[0].type)){ //this checks if the new suffix is a token like "--2"
+                        //in which case it isn't a built in function and we can append the missing +/- to the head and resolve
+                        val2[0].id = unassignedOps + "" + val2[0].id;
+                        val2[0].id = resolvePrecedingOperators(val2[0]);
+                        newToken = convertTokenToValue(val2); //convert result to get resolution fields
+                    }else{ //not a simple float or number, needs to be converted
+                        newToken = convertTokenToValue(val2); //convert the token to a number (could be 0b10 or even abs(2))
+                        let tmpToken = getToken(newToken.value + "", false); //convert that return to a token
+                        val2 = [];
+                        val2.push(tmpToken); //push this token val2
+                        val2[0].id = unassignedOps + "" + val2[0].id; //resolve it like a number now
+                        val2[0].id = resolvePrecedingOperators(val2[0]);
+                        newToken = convertTokenToValue(val2);
+                    }
+                }//else error detected
+
                 var resolution = {
-                    result: 1 + "",
-                    type: "TRUE"
+                    result: newToken.value + "",
+                    type: newToken.type
                 };
-                takeBranch = resolution.result;
-            }else if(assignOps.includes(currentOp.type)){ //else it assumed to be an assignment statement
-                resolution = resolveAssign(val1, currentOp, val2);
-            }else if(reservedWords.includes(currentOp.id)){
-                resolution = resolve_built_ins(currentOp, val2);
-                prefixLength = 0; //prefix shouldn't actually be accounted for in this resolution
-            }//else if "def"
-            
-            resolveQueue(opIndex, instrQueue, resolution, prefixLength, suffixLength); //remove these tokens & replace with ID for the resolution
+
+                resolveQueue(opIndex, instrQueue, resolution, prefixLength, suffixLength); //remove these tokens & replace with ID for the resolution
+
+            }else if((mathOps.includes(currentOp.type) || compareOps.includes(currentOp.type) || logicalOps.includes(currentOp.type) || assignOps.includes(currentOp.type))
+                    && suffixLength === 0 && currentOp.type !== "NOT"){ //special case of instances like "3-(-(-4))" where it mistakenly sees 3 - N/A
+                console.log("Case B");
+                validOp = true; //this one is just getting the appropriate suffix & can then continue the operation
+                hasSuffixLength = false;
+                let precedeOp = ["+","-"];
+                let unassignedOps = ""; //these will be concat to the front of the next id/number token
+                tmpIndex = opIndex + 1;
+                console.log(currentOp.type);
+                while(!hasSuffixLength){ //retiterate over tokens after op token
+                    if(tmpIndex < instrQueue.length){
+                        if(precedeOp.includes(instrQueue[tmpIndex].token.id)){//found another +/-
+                            suffixLength++;
+                            unassignedOps += instrQueue[tmpIndex].token.id;
+                            tmpIndex++;
+                        }else if(instrQueue[tmpIndex].priority === -1){//found correct suffix op
+                            suffixLength++;
+                            val2.push(instrQueue[tmpIndex].token); //push this new token to val2 list
+                            tmpIndex++;
+                        }else{ //if niether, end of potential suffix
+                            hasSuffixLength = true;
+                            tmpIndex--; //decrement back to last valid token
+                        }
+                    }else{ //outside the length of the queue
+                        hasSuffixLength = true;
+                        tmpIndex--; //return to last legal index
+                    }
+                }
+                let newToken, tmpToken;
+                let isNeg = false;
+                if(suffixLength > 0){
+                    if(numTypes.includes(val2[0].type)){ //this checks if the new suffix is a token like "--2"
+                        //in which case it isn't a built in function and we can append the missing +/- to the head and resolve
+                        val2[0].id = unassignedOps + "" + val2[0].id;
+                        val2[0].id = resolvePrecedingOperators(val2[0]);
+                        if(val2[0].id.charAt(0) === "-"){
+                            val2[0].id = val2[0].id.slice(1,val2[0].id.length); //if the "-" is left on it will return the wrong token in the next step
+                            isNeg = true;
+                        }
+                        tmpToken = convertTokenToValue(val2);
+                        newToken = getToken(tmpToken.value + "", false); //convert result to a token since we proceed with operation after this conversion
+                    }else{ //not a simple float or number, needs to be converted
+                        newToken = convertTokenToValue(val2); //convert the token to a number (could be 0b10 or even abs(2))
+                        let tmpToken = getToken(newToken.value + "", false); //convert that return to a token
+                        val2 = [];
+                        val2.push(tmpToken); //push this token val2
+                        val2[0].id = unassignedOps + "" + val2[0].id; //resolve it like a number now
+                        val2[0].id = resolvePrecedingOperators(val2[0]);
+                        if(val2[0].id.charAt(0) === "-"){
+                            val2[0].id = val2[0].id.slice(1,val2[0].id.length); //if the "-" is left on it will return the wrong token in the next step
+                            isNeg = true;
+                        }
+                        tmpToken = convertTokenToValue(val2);
+                        newToken = getToken(tmpToken.value + "", false);
+                    }
+                }//else error detected
+                if(isNeg) //return any "-" that was sliced off
+                    newToken.id = "-" + newToken.id;
+                val2 = []; //clear the val2 array
+                val2.push(newToken); //push the new token genrated
+
+            }else if((currentOp.type === "PLUS" || currentOp.type === "MINUS") && prefixLength === 0){ //instance where it reads something like "a = -(2)" and tries N/A - 2
+                console.log("Case C");
+                validOp = false;
+                let precedeOp = ["+","-"];
+                let unassignedOps = currentOp.id + "";
+                let newToken;
+                if(suffixLength > 0){
+                    if(numTypes.includes(val2[0].type)){ //this checks if the new suffix is a token like "--2"
+                        //in which case it isn't a built in function and we can append the missing +/- to the head and resolve
+                        val2[0].id = unassignedOps + "" + val2[0].id;
+                        val2[0].id = resolvePrecedingOperators(val2[0]);
+                        newToken = convertTokenToValue(val2); //convert result to get resolution fields
+                    }else{ //not a simple float or number, needs to be converted
+                        newToken = convertTokenToValue(val2); //convert the token to a number (could be 0b10 or even abs(2))
+                        let tmpToken = getToken(newToken.value + "", false); //convert that return to a token
+                        val2 = [];
+                        val2.push(tmpToken); //push this token val2
+                        val2[0].id = unassignedOps + "" + val2[0].id; //resolve it like a number now
+                        val2[0].id = resolvePrecedingOperators(val2[0]);
+                        newToken = convertTokenToValue(val2);
+                    }
+                }//else error detected
+
+                var resolution = {
+                    result: newToken.value + "",
+                    type: newToken.type
+                };
+
+                resolveQueue(opIndex, instrQueue, resolution, prefixLength, suffixLength); //remove these tokens & replace with ID for the resolution
+
+            }else if(currentOp.type === "NOT" && suffixLength === 0){ //for sequences of "not not not ..."
+                //this will be a sliding method, we know there is a string of nots and something to operate on at some point to the right,
+                //we will slide the opIndex over to the not just before that value & increase its priority without doing a resolution, so on next iteration
+                //the right most not will be resolved first
+                let tempIndex = opIndex + 1;
+                let hasOpIndex = false;
+                while(!hasOpIndex && tempIndex < instrQueue.length){
+                    if(instrQueue[tempIndex].priority !== -1){
+                        tempIndex++; //just another not
+                    }else{
+                        hasOpIndex = true;
+                        tempIndex--; //got back to preceding not
+                    }
+                }
+                opIndex = tempIndex;
+                instrQueue[opIndex].priority++;
+
+            }else{ //there was a prefix or suffix to perform the operation upon
+                validOp = true;
+            }
+
+            //standard, non-special case resolutions below
+            //perform the operation
+            let isPrint = false;
+            if(validOp){
+                if(mathOps.includes(currentOp.type)){ //if the next prioritized operation is math, go to resolve Math
+                    resolution = resolveMath(val1, currentOp, val2);
+                }else if(compareOps.includes(currentOp.type)){ //check if it is a comparator
+                    resolution = resolveCompare(val1, currentOp, val2);
+                }else if(logicalOps.includes(currentOp.type)){
+                    resolution = resolveLogicalOp(val1, currentOp, val2);
+                    if(currentOp.type === "NOT")
+                        prefixLength = 0; //even if a valid token was in front of "not" it didn't actually perform in this operation
+                }else if(branchOps.includes(currentOp.type)){
+                    resolution = resolve_value_True_or_False(val2);
+                    takeBranch = resolution.result;
+                }else if(currentOp.type === "ELSE"){
+                    var resolution = {
+                        result: 1 + "",
+                        type: "TRUE"
+                    };
+                    takeBranch = resolution.result;
+                }else if(assignOps.includes(currentOp.type)){ //else it assumed to be an assignment statement
+                    resolution = resolveAssign(val1, currentOp, val2);
+                }else if(currentOp.type === "FORMAT"){
+
+                }else if(currentOp.type === "PRINT"){
+                    resolution = resolvePrint(instrQueue);
+                    instrQueue = [];
+                    isPrint = true;
+                }else if(reservedWords.includes(currentOp.id)){//catch 22 of all missed built-in functions
+                    resolution = resolve_built_ins(currentOp, val2);
+                    prefixLength = 0; //prefix shouldn't actually be accounted for in this resolution
+                }//else if "def"
+
+                if(!isPrint)
+                    resolveQueue(opIndex, instrQueue, resolution, prefixLength, suffixLength); //remove these tokens & replace with ID for the resolution
+            }
+
+
+            //for debugging purposes
+            for(var x = 0; x < instrQueue.length; x++){
+                document.getElementById("outputField").value += instrQueue[x].token.id + " ";
+            }
+            document.getElementById("outputField").value += "\n";
+            for(var x = 0; x < instrQueue.length; x++){
+                document.getElementById("outputField").value += instrQueue[x].priority.toString() + " ";
+            }
+            document.getElementById("outputField").value += "\n";
+
         }
-        
-        
-        //for debugging purposes
-        for(var x = 0; x < instrQueue.length; x++){
-            document.getElementById("outputField").value += instrQueue[x].token.id + " ";
-        }
-        document.getElementById("outputField").value += "\n";
-        for(var x = 0; x < instrQueue.length; x++){
-            document.getElementById("outputField").value += instrQueue[x].priority.toString() + " ";
-        }
-        document.getElementById("outputField").value += "\n";
-        
     }
     
     return takeBranch;
@@ -692,6 +745,7 @@ until there is only 1 token left to resolve. This method does not push the instr
 push the appropriate syntax for operations. While it's called assign it can also handle standalone ops, like 3+3 or 4 == 5
  */
 function order_assign_statement(passedTokens){
+    
     
     var instrQueue = createInstrQueue(passedTokens);
         
@@ -740,6 +794,14 @@ function order_cust_Function(passedTokens, input){
     var lineOfInsidence = instrQueue[0].token.line_no;//since the tokens are being dealt with in another method, we need to store the line they occur on
     
     var takeBranch = stepThroughRawInstr(instrQueue); //this method returns a boolean used to determine if we stay in the loop
+    
+}
+
+function order_print_statement(passedTokens){
+    
+    var instrQueue = createInstrQueue(passedTokens);
+    
+    stepThroughRawInstr(instrQueue);
     
 }
 
@@ -1304,7 +1366,7 @@ function resolveAssign(val1, op, val2){
         runtime_error("INVALID_ASSIGNMENT");
     }
     pushInstr("Assignment " + instr, " resolved to value " + resolved, cmdCount, lineN, 0);
-    var resultType = "ID"; //assign should always go to ID, 4 = 5 is bad
+    var resultType = newVarType;
     var resolution = {
         result: newVal + "",
         type: resultType
@@ -1322,6 +1384,54 @@ function resolve_value_True_or_False(passedVal){
     };
     
     return resolution;
+}
+
+function formatString(val1, opToken, val2){
+    //used to temporarily store the values format is trying to replace in adjoining string
+    var formatVar = {
+        forName: "",
+        forVal: "",
+        forIndex: 0
+    };
+    
+    
+    
+    
+}
+
+//takes all tokens in the instrQueue, since print should be called last, and concats all non-commas into the string that gets displayed
+function resolvePrint(val2){
+    var toPrint = "";
+    var toResolve = new Array();
+    var numToPrint;
+    
+    for(var x = 1; x < val2.length; x++){
+        if(val2[x].token.type !== "COMMA"){ //skip the delimiting commas
+            toResolve.push(val2[x].token);
+            numToPrint = convertTokenToValue(toResolve); //convert the token to its value, this helps gets variables
+            switch(numToPrint.type){ //convert that value if necessary to its textual variant
+                case "BINARY": toPrint += "0b" + numToPrint.value.toString(2);
+                   break;
+                case "OCTAL": toPrint += "0o" + numToPrint.value.toString(8);
+                    break;
+                case "HEX": toPrint += "0x" + numToPrint.value.toString(16);
+                    break;
+                default: toPrint += numToPrint.value + "";
+                    break;
+            }
+            toResolve = []; //reset toResolve
+        }
+    }
+    
+    pushInstr("The final string print to Screen is \"", toPrint + " \"", cmdCount, 0, 0);
+    
+    var resolution = {
+        result: toPrint + "",
+        type: "STRING"
+    };
+    
+    return resolution;
+    
 }
 
 
