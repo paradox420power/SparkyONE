@@ -261,6 +261,7 @@ function createInstrQueue(passedTokens){
     var dontQueue = false;
     var printComma = false;
     var functionParenScope = 0;
+    var isFormat = false;
     for(var x = 0; x < passedTokens.length; x++){ //add passed tokens to instruction queue & priority
         if(passedTokens[x].type !== "SPACE"){
             tempToken = passedTokens[x];
@@ -278,16 +279,20 @@ function createInstrQueue(passedTokens){
                 case "MULT_ASSIGN":
                 case "DIV_ASSIGN":
                 case "MOD_ASSIGN":
-                case "ASSIGN_EQUALS": tempPriority = 0 + priorityMod;
-                    priorityMod++; //assigns need to be read right to left, so we increment priority mod for each type assign
+                case "ASSIGN_EQUALS":
+                    if(!isFormat){
+                        tempPriority = 0 + priorityMod;
+                        priorityMod++; //assigns need to be read right to left, so we increment priority mod for each type assign
+                    }else
+                        tempPriority = 0;
                     break;
-                case "FORMAT":
+                case "FORMAT": isFormat = true;
                 case "AND":
                 case "OR": tempPriority = 1 + priorityMod;
                     break;
                 case "NOT": tempPriority = 2 + priorityMod;
                     break;
-                case "COMPARE_EQUALS": //operations can have comparators, for some reason
+                case "COMPARE_EQUALS": 
                 case "LESS_THAN_EQUAL":
                 case "LESS_THAN":
                 case "GREATER_THAN_EQUAL":
@@ -311,15 +316,20 @@ function createInstrQueue(passedTokens){
                 case "RPAREN": priorityMod -= 10;
                     if(!printComma)
                         functionParenScope--;
-                    if(functionParenScope === 0)
+                    if(functionParenScope === 0){ //when this hits 0 we've returned to commas not related to the built in function & should continue to queue them
                         printComma = true;
+                        isFormat = false;
+                    }
                     dontQueue = true;
                     break;
                 case "COMMA": 
-                    if(!printComma) //only queue the commas dividing pritn segments
+                    if(!printComma) //only queue the commas dividing print segments
                         dontQueue = true; //function will have commas, but we dont really care, ex. max(1,2,3)
                     else
                         tempPriority = 0;
+                    if(isFormat){ //comma cannot divide for both print & format, so we slightly modify the id to "f," to differentiate
+                        tempToken.id = "f,";
+                    }
                     break;
                 case "PERIOD":
                 case "COLON": //this should be passed, but it does'nt need to be queued
@@ -689,32 +699,57 @@ function stepThroughRawInstr(instrQueue){
             if(validOp){
                 if(mathOps.includes(currentOp.type)){ //if the next prioritized operation is math, go to resolve Math
                     resolution = resolveMath(val1, currentOp, val2);
+                    
                 }else if(compareOps.includes(currentOp.type)){ //check if it is a comparator
                     resolution = resolveCompare(val1, currentOp, val2);
+                    
                 }else if(logicalOps.includes(currentOp.type)){
                     resolution = resolveLogicalOp(val1, currentOp, val2);
                     if(currentOp.type === "NOT")
                         prefixLength = 0; //even if a valid token was in front of "not" it didn't actually perform in this operation
+                    
                 }else if(branchOps.includes(currentOp.type)){
                     resolution = resolve_value_True_or_False(val2);
                     takeBranch = resolution.result;
+                    
                 }else if(currentOp.type === "ELSE"){
                     var resolution = {
                         result: 1 + "",
                         type: "TRUE"
                     };
                     takeBranch = resolution.result;
+                    
                 }else if(assignOps.includes(currentOp.type)){ //else it assumed to be an assignment statement
                     resolution = resolveAssign(val1, currentOp, val2);
+                    
                 }else if(currentOp.type === "FORMAT"){
-
+                    //we need to recompute the suffix to inclue all tokens within format(...)
+                    tmpIndex = opIndex + 1;
+                    suffixLength = 0;
+                    hasSuffixLength = false;
+                    val2 = [];
+                    while(!hasSuffixLength){
+                        //now we are bound by the lngth of the queue, the priority being -1, finding an assign equals (for cases of a="str"), and the "f," commas
+                        if(tmpIndex < instrQueue.length && (instrQueue[tmpIndex].priority === -1 || instrQueue[tmpIndex].token.type === "ASSIGN_EQUALS" || instrQueue[tmpIndex].token.id === "f,")){//still in instrQueue bounds & looking at non-operator tokens
+                            suffixLength++;
+                            val2.push(instrQueue[tmpIndex].token); //push this new token to val2 list
+                            tmpIndex++;
+                        }else{
+                            hasSuffixLength = true;
+                            tmpIndex--; //decrement back to last valid token
+                        }
+                    }
+                    resolution = formatString(val1, currentOp, val2);
+                    
                 }else if(currentOp.type === "PRINT"){
                     resolution = resolvePrint(instrQueue);
                     instrQueue = [];
                     isPrint = true;
+                    
                 }else if(reservedWords.includes(currentOp.id)){//catch 22 of all missed built-in functions
                     resolution = resolve_built_ins(currentOp, val2);
                     prefixLength = 0; //prefix shouldn't actually be accounted for in this resolution
+                    
                 }//else if "def"
 
                 if(!isPrint)
@@ -1388,14 +1423,106 @@ function resolve_value_True_or_False(passedVal){
 
 function formatString(val1, opToken, val2){
     //used to temporarily store the values format is trying to replace in adjoining string
-    var formatVar = {
-        forName: "",
-        forVal: "",
-        forIndex: 0
+    var formattedString = val1[0].id;
+    var forVarList = new Array(); //unlike normal variables, these exist solely in the scope of format
+    
+    
+    var toResolve = new Array();
+    var resolvedIndex, indexValue, indexType;
+    for(var x = 0; x < val2.length; x++){ //get all the values being formatted into the string
+        if(val2[x].id !== "f,"){ //skip over this token, it shouldn't be formatted
+            let formatVar = { //make it a let in scope of the if, so when the for loop increments the last formatVar will be dropped from memory
+                forName: "",
+                forVal: ""
+            };
+            if(x+1 < val2.length){
+                if(val2[x].type === "ID"){//creating a named format variable
+                    toResolve.push(val2[x+2]); //push the token after the equal sign
+                    resolvedIndex = convertTokenToValue(toResolve);
+                    indexValue = resolvedIndex.value;
+                    indexType = resolvedIndex.type;
+                    switch(indexType){ //convert that value if necessary to its textual variant
+                        case "BINARY": indexValue = "0b" + indexValue.toString(2);
+                           break;
+                        case "OCTAL": indexValue = "0o" + indexValue.toString(8);
+                            break;
+                        case "HEX": indexValue = "0x" + indexValue.toString(16);
+                            break;
+                    }
+                    formatVar.forName = val2[x].id; //name is equal to token id
+                    formatVar.forVal = indexValue; //value to replace is the converted token
+                    x += 2; //increment past the managed values (the for loop will ++ to get to the next value)
+                }else{//unnamed variable, only accessible in {} or {#}
+                    toResolve.push(val2[x]); //push the token at that index
+                    resolvedIndex = convertTokenToValue(toResolve);
+                    indexValue = resolvedIndex.value;
+                    indexType = resolvedIndex.type;
+                    switch(indexType){ //convert that value if necessary to its textual variant
+                        case "BINARY": indexValue = "0b" + indexValue.toString(2);
+                           break;
+                        case "OCTAL": indexValue = "0o" + indexValue.toString(8);
+                            break;
+                        case "HEX": indexValue = "0x" + indexValue.toString(16);
+                            break;
+                    }
+                    formatVar.forName = indexValue; //name is not relevant in an unnamed format value
+                    formatVar.forVal = indexValue; //value to replace is the converted token
+                }
+            }else{ //length does not allow for unnamed format variable
+                toResolve.push(val2[x]); //push the token at that index
+                resolvedIndex = convertTokenToValue(toResolve);
+                indexValue = resolvedIndex.value;
+                indexType = resolvedIndex.type;
+                switch(indexType){ //convert that value if necessary to its textual variant
+                    case "BINARY": indexValue = "0b" + indexValue.toString(2);
+                       break;
+                    case "OCTAL": indexValue = "0o" + indexValue.toString(8);
+                        break;
+                    case "HEX": indexValue = "0x" + indexValue.toString(16);
+                        break;
+                }
+                formatVar.forName = indexValue; //name is not relevant in an unnamed format value
+                formatVar.forVal = indexValue; //value to replace is the converted token
+            }
+            forVarList.push(formatVar); //push the calculated value
+            toResolve = []; //empty the resolve list for next round
+        }
+    }
+    
+    for(var y = 0; y < forVarList.length; y++)
+        console.log("Format Name " + forVarList[y].forName + " & Value " + forVarList[y].forVal);
+    
+    //case 1 is only has {}, case 2 is {#}, {varName} or a mix
+    var replaceByIndex = "";
+    var replaceByName = "";
+    if(formattedString.includes("{}")){ //case 1 has no overlap
+        for(var y = 0; y < forVarList.length; y++){
+            if(formattedString.includes("{}")){
+                formattedString = formattedString.replace("{}", forVarList[y].forVal + "");
+                pushInstr("Format replaced {}", " with " + forVarList[y].forVal, cmdCount, 0, 0);
+            }
+        }
+    }else{
+        for(var y = 0; y < forVarList.length; y++){
+            replaceByIndex = "{"+y+"}";
+            replaceByName = "{"+forVarList[y].forName+"}";
+            while(formattedString !== formattedString.replace(replaceByIndex, forVarList[y].forVal + "")){ //see if replace will change the string
+                formattedString = formattedString.replace(replaceByIndex, forVarList[y].forVal + ""); //only operates once
+                pushInstr("Format replaced " + replaceByIndex, " with " + forVarList[y].forVal, cmdCount, 0, 0);
+            }
+            while(formattedString !== formattedString.replace(replaceByName, forVarList[y].forVal + "")){
+                formattedString = formattedString.replace(replaceByName, forVarList[y].forVal + "");
+                pushInstr("Format replaced " + replaceByName, " with " + forVarList[y].forVal, cmdCount, 0, 0);
+            }
+        }
+    }
+    
+    var resolution = {
+        result: formattedString + "",
+        type: "STRING"
     };
     
-    
-    
+    return resolution;
     
 }
 
@@ -1421,6 +1548,7 @@ function resolvePrint(val2){
             }
             toResolve = []; //reset toResolve
         }
+        toPrint += " ";
     }
     
     pushInstr("The final string print to Screen is \"", toPrint + " \"", cmdCount, 0, 0);
@@ -1740,7 +1868,6 @@ function resolve_ceil(token)
 {
     var tokenVal = convertTokenToValue(token).value;
     var resolution;
-    console.log(tokenVal);
     if (Number.isInteger(tokenVal) /*|| Number.isFloat(tokenVal)*/)
     {
         var newVal = Math.ceil(tokenVal);
