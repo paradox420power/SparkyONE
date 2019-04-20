@@ -8,7 +8,7 @@ var insideDef = 0;
 
 //print parsing error
 function error_expected_not_matching(expected, received, line_no){
-    document.write("Expected Token: " + expected + "<br>Received Token: " + received + "<br>At line " + line_no + "<br>");
+    document.getElementById("outField").value +=("Expected Token: " + expected + "\nReceived Token: " + received + "\nAt line " + line_no + "\n");
 }
 
 //used to remove unwanted spaces
@@ -17,7 +17,7 @@ function skipSpaces(){
     if(token.type === "SPACE"){
         program = program.slice(token.length);
         //token = getToken(program, false);
-        //document.write("Next Token: " + token.id + "<br>");
+        //document.getElementById("outField").value +=("Next Token: " + token.id + "\n");
     }
     //else do nothing
 }
@@ -31,12 +31,12 @@ function check_indents(){
             //unexpected indent
             indent_stack = [];
             indent_stack.push(0);
-            //document.write("index syntax error at line " + token.line_no + "<br>Current: " + current + " TabLength: " + token.length + "<br>");
+            //document.getElementById("outField").value +=("index syntax error at line " + token.line_no + "\nCurrent: " + current + " TabLength: " + token.length + "\n");
             syntax_error("INDENTATION_ERROR");
         }else if(token.length < current[1]){
             //possible dedent
-            //document.write("Popping: " + current + "<br>");
-            //document.write(indent_stack.toString() + "<br>");
+            //document.getElementById("outField").value +=("Popping: " + current + "\n");
+            //document.getElementById("outField").value +=(indent_stack.toString() + "\n");
             check_indents();
         }else if(token.length === current[1]){
             //matching indent
@@ -59,7 +59,7 @@ function increase_indent(){
         }else{
             indent_stack.push(current);
             indent_stack.push(token.length);
-            //document.write("Token: " + token.type + " adding " + token.length + " to stack at line " + token.line_no + "<br>");
+            //document.getElementById("outField").value +=("Token: " + token.type + " adding " + token.length + " to stack at line " + token.line_no + "\n");
         }
     }
 }
@@ -106,17 +106,17 @@ function expect(tokenType){
     if(token.type === tokenType){
         program = program.slice(token.length);
         if(token.type === "END_OF_LINE"){
-            incrementCodeLine();
+            //incrementCodeLine();
             readEmptyLines();
             //check correct indents (stack issue)
             //check_indents();
         }
-        //document.write(token.type + " read at line " + token.line_no + "<br>"); //comment this out when not trouble shooting
+        //document.getElementById("outField").value +=(token.type + " read at line " + token.line_no + "\n"); //comment this out when not trouble shooting
     }else{
         program = program.slice(token.length); //unnecessary to slice since an error is thrown
         error_expected_not_matching(tokenType, token.type, token.line_no);
     }
-    //document.write(program + "<br><br>");
+    //document.getElementById("outField").value +=(program + "\n\n");
     return token;
 }
 
@@ -141,7 +141,7 @@ function readEmptyLines(){
         }
     }else if(token.type === "END_OF_LINE"){
         program = program.slice(token.length);
-        incrementCodeLine();
+        //incrementCodeLine();
         readEmptyLines();
     }
 }
@@ -481,20 +481,45 @@ function parse_else_stmt(){
 }
 
 function parse_conditional(){
-    parse_primary();
     var token = peek();
-    var compare_ops = ["COMPARE_EQUALS", "NOT_EQUAL", "LESS_THAN", "LESS_THAN_EQUAL", "GREATER_THAN", "GREATER_THAN_EQUAL"];
-    if(compare_ops.includes(token.type)){
-        parse_comparison_operator();
-        parse_primary();
+    while(token.type === "NOT"){
+        expect("NOT");
         token = peek();
-        var link_ops = ["AND", "OR"];
-        if(link_ops.includes(token.type)){
+    }
+    parse_expr();
+    token = peek();
+    var compare_ops = ["COMPARE_EQUALS", "NOT_EQUAL", "LESS_THAN", "LESS_THAN_EQUAL", "GREATER_THAN", "GREATER_THAN_EQUAL"];
+    var link_ops = ["AND", "OR"];
+    let moreToCompare = false;
+    if(compare_ops.includes(token.type) || link_ops.includes(token.type))
+        moreToCompare = true;
+    while(moreToCompare){
+        if(compare_ops.includes(token.type)){
+            parse_comparison_operator();
+            token = peek();
+            while(token.type === "NOT"){
+                expect("NOT");
+                token = peek();
+            }
+            parse_expr();
+            token = peek();
+            if(!compare_ops.includes(token.type) && !link_ops.includes(token.type))
+                moreToCompare = false;
+        }else if(link_ops.includes(token.type)){
             parse_comparison_link();
-            parse_conditional();
+            token = peek();
+            while(token.type === "NOT"){
+                expect("NOT");
+                token = peek();
+            }
+            parse_expr();
+            token = peek();
+            if(!compare_ops.includes(token.type) && !link_ops.includes(token.type))
+                moreToCompare = false;
+        }else{
+            syntax_error("INVALID_COND_OPERATOR");
         }
-    }else{
-        syntax_error("INVALID_COND_OPERATOR");
+        token = peek();
     }
 }
 
@@ -659,6 +684,7 @@ function parse_assign_stmt(){
                 case "TRUE":
                 case "FALSE":
                 case "APOSTROPHE":
+                case "ABS":
                 case "QUOTE": 
                 case "NONE":
                 case "INPUT":
@@ -776,7 +802,7 @@ function parse_assign_op(){
 
 function parse_primary(){
     var token = peek();
-    var primaries = ["ID", "NUMBER", "FLOAT", "TRUE", "FALSE", "QUOTE", "APOSTROPHE", "NONE"];
+    var primaries = ["ID", "NUMBER", "FLOAT", "TRUE", "FALSE", "QUOTE", "APOSTROPHE", "NONE", "TRUE", "FALSE"];
     if(primaries.includes(token.type)){
         switch(token.type){
             case "ID": expect("ID");
@@ -794,6 +820,10 @@ function parse_primary(){
                 break;
             case "NONE": expect("NONE");
                 break;
+            case "TRUE": expect("TRUE");
+                break;
+            case "FALSE": expect("FALSE");
+                break;
             default: syntax_error("INVALID_PRIMARY");
                 break;
         }
@@ -805,12 +835,12 @@ function parse_primary(){
 //TO DO
 function parse_string(){
     var token = peek();
-    //document.write(token.type + "<br><br>");
+    //document.getElementById("outField").value +=(token.type + "\n\n");
     if(token.type === "QUOTE"){
         expect("QUOTE");
         token = peek();
         while(token.type !== "QUOTE"){
-            //document.write(token.type + "<br><br>");
+            //document.getElementById("outField").value +=(token.type + "\n\n");
             expect(token.type);
             token = peek();
         }
@@ -819,7 +849,7 @@ function parse_string(){
         expect("APOSTROPHE");
         token = peek();
         while(token.type !== "APOSTROPHE"){
-            //document.write(token.type + "<br><br>");
+            //document.getElementById("outField").value +=(token.type + "\n\n");
             expect(token.type);
             token = peek();
         }
@@ -1292,7 +1322,7 @@ function parse_format_function(){
     //syntax is correct, check other constraints for "somestring".format(...)
     if(type === "APOSTROPHE" || type === "QUOTE"){
         //TO DO
-        //document.write("hi<br>");
+        //document.getElementById("outField").value +=("hi\n");
         if(string_content.includes("{") || string_content.includes("}")){
             validate_format_string(string_content, parameterCount, namedParameters);
             
@@ -1458,7 +1488,8 @@ function parse_input_stmt(){
 function parse_comment(){
     expect("HASH_TAG");
     var token = peek();
-    while(token.type !== "END_OF_LINE"){
+    var enders = ["END_OF_LINE", "END_OF_FILE"]
+    while(!enders.includes(token.type)){
         expect(token.type);
         token = peek();
     }
@@ -1685,7 +1716,7 @@ function syntax_error(errorType){
         alert("Invalid input!");
         exit();
     }else{
-        //document.write("Unspecified Error<br>");
+        //document.getElementById("outField").value +=("Unspecified Error\n");
         alert("Unspecified Error");
         exit();
     }
