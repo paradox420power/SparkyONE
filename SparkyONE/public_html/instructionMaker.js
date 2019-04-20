@@ -239,6 +239,17 @@ function create_instructions(input){
                 order_print_statement(lineTokens);
                 lineTokens = [];
                 break;
+            case "IMPORT"://not fully implemented yet, treated like a comment for now
+            case "HASH_TAG": //free floating comments, slice off entire line
+            case "QUOTE":
+                console.log("HERE");
+                while(!lineEnds.includes(lexeme.type) || lexeme.type === "SEMICOLON"){ //a line can be "a = ( 6 + \n 6) a still be treated as a single instruction
+                    lexeme = getToken(input, true);
+                    input = input.slice(lexeme.length);
+                    console.log(lexeme.type);
+                }
+                lineTokens = [];
+                break;
             case "SEMICOLON": //usually sliced at end of instruction lnie, this catches ";;"
             case "SPACE":
             case "END_OF_LINE": input = skipEmptyLines(input);
