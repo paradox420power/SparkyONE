@@ -124,20 +124,19 @@ function skipEmptyLines(input){
         input = input.slice(token.length); //slice off the spaces
         token2 = getToken(input, false);
         if(token2.type === "END_OF_LINE"){ //if next is line break, its ok
-            readEmptyLines();
+            input = skipEmptyLines(input);
         }else{ //some keyword was read & the spaces could be indent that need to be read
             if(token.type === "SPACE"){
-                for(i = 0; i < token.length; i++){
+                for(var i = 0; i < token.length; i++){
                     input = " " + input;
                 }
-                //increase_indent();
             }else{
                 input = token.id + "" + input; //add spliced id back to front of program
             }
         }
     }else if(token.type === "END_OF_LINE"){
         input = input.slice(token.length);
-        readEmptyLines();
+        input = skipEmptyLines(input);
     }
     return input;
 }
@@ -200,16 +199,14 @@ function create_instructions(input){
                 instr_line += lexeme.id + " "; //we want to see : on the instruction, but not he following line break
                 appendTokenList(lexeme);
                 input = input.slice(lexeme.length);
-                lexeme = getToken(input, true); //next should be a linebreak that we don't want on the input
-                input = input.slice(lexeme.length);
                 
                 pushInstr("Instruction" + instr_line, "", cmdCount, lexeme.line_no, 0); //this pushes the line being resolved before actualy step wise resolution
                 if(lineTokens[0].type === "WHILE")
-                    order_while_loop(lineTokens, input);
+                    input = order_while_loop(lineTokens, input);
                 else if(lineTokens[0].type === "IF" || lineTokens[0].type === "ELIF" || lineTokens[0].type === "ELSE")
-                    order_if_statement(lineTokens, input);
+                    input = order_if_statement(lineTokens, input);
                 else if(lineTokens[0].type === "DEF")
-                    order_cust_function(lineTokens, input);
+                    input = order_cust_function(lineTokens, input);
                 lineTokens = [];
                 break;
             case "PRINT":
@@ -242,11 +239,9 @@ function create_instructions(input){
             case "IMPORT"://not fully implemented yet, treated like a comment for now
             case "HASH_TAG": //free floating comments, slice off entire line
             case "QUOTE":
-                console.log("HERE");
                 while(!lineEnds.includes(lexeme.type) || lexeme.type === "SEMICOLON"){ //a line can be "a = ( 6 + \n 6) a still be treated as a single instruction
                     lexeme = getToken(input, true);
                     input = input.slice(lexeme.length);
-                    console.log(lexeme.type);
                 }
                 lineTokens = [];
                 break;
@@ -266,7 +261,7 @@ function create_instructions(input){
 
 function createInstrQueue(passedTokens){
     var priorityMod = 0; //used to scope priority of () operations
-    var instrQueue = new Array();
+    let instrQueue = new Array();
     var tempToken;
     var tempPriority;
     var dontQueue = false;
@@ -793,7 +788,7 @@ push the appropriate syntax for operations. While it's called assign it can also
 function order_assign_statement(passedTokens){
     
     
-    var instrQueue = createInstrQueue(passedTokens);
+    let instrQueue = createInstrQueue(passedTokens);
         
     stepThroughRawInstr(instrQueue);
     
@@ -801,25 +796,51 @@ function order_assign_statement(passedTokens){
 }
 
 function order_while_loop(passedTokens, input){
-    var instrQueue = createInstrQueue(passedTokens);
+    let tokenHolder = new Array();
+    for(var x = 0; x < passedTokens.length; x++){ //christ, why is JavaScript create a pointer to the same object when you do "var arr1 = arr2"
+        let lexeme = {
+            id: passedTokens[x].id,
+            type: passedTokens[x].type,
+            line_no: passedTokens[x].line_no,
+            charStart: passedTokens[x].charStart,
+            charEnd: passedTokens[x].charEnd
+        };
+        tokenHolder.push(lexeme);
+    }
+    let instrQueue = createInstrQueue(tokenHolder);
     var lineOfInsidence = instrQueue[0].token.line_no;//since the tokens are being dealt with in another method, we need to store the line they occur on
     
     var takeBranch = stepThroughRawInstr(instrQueue); //this method returns a boolean used to determine if we stay in the loop
     
-    //resolve the state of the while loop
-    if(takeBranch === "1"){
-        pushInstr("The While loop evaluated to True, take the path", "" , cmdCount, lineOfInsidence, 0);
-        //read & store nested instructions for operation
-    }else{
-        pushInstr("The While loop evaluated to False, don't take the path", "" , cmdCount, lineOfInsidence, 0);
-        //skip nested instructions
-    }
-    //check conditional & possibly loop again
+    var inputIndentCode = getIndentCode(input);
+    var indented = inputIndentCode.indented;
+    var inputSlice = inputIndentCode.inputSlice;
     
+    //resolve the state of the while loop
+    while(takeBranch === "1"){
+        pushInstr("The While loop evaluated to True, take the path", "" , cmdCount, lineOfInsidence, 0);
+        create_instructions(indented); //do the indented code
+        tokenHolder = [];
+        for(var x = 0; x < passedTokens.length; x++){ //reset the tokenHolder for another loop
+            let lexeme = {
+                id: passedTokens[x].id,
+                type: passedTokens[x].type,
+                line_no: passedTokens[x].line_no,
+                charStart: passedTokens[x].charStart,
+                charEnd: passedTokens[x].charEnd
+            };
+            tokenHolder.push(lexeme);
+        }
+        instrQueue = createInstrQueue(tokenHolder);
+        takeBranch = stepThroughRawInstr(instrQueue); //re=evaluate the loop condiiton
+    }
+    pushInstr("The While loop evaluated to False, don't take the path", "" , cmdCount, lineOfInsidence, 0);
+    
+    return inputSlice;
 }
 
 function order_if_statement(passedTokens, input){
-    var instrQueue = createInstrQueue(passedTokens);
+    let instrQueue = createInstrQueue(passedTokens);
     var lineOfInsidence = instrQueue[0].token.line_no;//since the tokens are being dealt with in another method, we need to store the line they occur on
     
     var takeBranch = stepThroughRawInstr(instrQueue); //this method returns a boolean used to determine if we enter the indents
@@ -836,7 +857,7 @@ function order_if_statement(passedTokens, input){
 }
 
 function order_cust_Function(passedTokens, input){
-    var instrQueue = createInstrQueue(passedTokens);
+    let instrQueue = createInstrQueue(passedTokens);
     var lineOfInsidence = instrQueue[0].token.line_no;//since the tokens are being dealt with in another method, we need to store the line they occur on
     
     var takeBranch = stepThroughRawInstr(instrQueue); //this method returns a boolean used to determine if we stay in the loop
@@ -845,7 +866,7 @@ function order_cust_Function(passedTokens, input){
 
 function order_print_statement(passedTokens){
     
-    var instrQueue = createInstrQueue(passedTokens);
+    let instrQueue = createInstrQueue(passedTokens);
     
     stepThroughRawInstr(instrQueue);
     
@@ -2033,6 +2054,82 @@ function resolve_built_ins(opToken, tokenList)
     }
     
     return res;
+}
+
+function getIndentCode(input){
+    var toReturn = {
+        indented: "",
+        inputSlice: ""
+    };
+    var lexeme, indentAmount, compareLength;
+    var notEndOfFile = true;
+    var isQuoted = false;
+    var isApost = false;
+    var unpairedParen = 0;
+    var unpairedBracket = 0;
+    var unpairedBrace = 0;
+    var lineEnders = ["END_OF_LINE", "END_OF_FILE"]; //all tokens that signal a necessary recompute of indents (even though colon is an end of line, it is followed by \n)
+    input = skipEmptyLines(input); //skip empty lines until first w/ instruction
+    lexeme = getToken(input, false); //we want the first space
+    input = input.slice(lexeme.length); //remove the spaces from input
+    indentAmount = lexeme.length; //current indent stack
+    compareLength = lexeme.length;
+    while(notEndOfFile && compareLength >= indentAmount){ //while the indents are longer or equal to this value so long as not at end of file
+        while(!lineEnders.includes(lexeme.type) && (!isQuoted || !isApost ||
+                unpairedParen !== 0 || unpairedBrace !== 0 || unpairedBracket !== 0)){ //add all the tokesn on this indented line to the indented return value
+            if(lexeme.type === "SPACE")
+                for(var x = 0; x < lexeme.length; x++)
+                    toReturn.indented += lexeme.id; //space length is important
+            else
+                toReturn.indented += lexeme.id; //all other tokens should only be added once
+            switch(lexeme.type){
+                case "QUOTE": isQuoted = !isQuoted;
+                    break;
+                case "APOSTROPHE": isApost = !isApost;
+                    break;
+                case "LPAREN":
+                    if(!isQuoted && !isApost)
+                        unpairedParen++;
+                    break;
+                case "RPAREN":
+                    if(!isQuoted && !isApost)
+                        unpairedParen--;
+                    break;
+                case "LBRACE":
+                    if(!isQuoted && !isApost)
+                        unpairedBrace++;
+                    break;
+                case "RBRACE":
+                    if(!isQuoted && !isApost)
+                        unpairedBrace--;
+                    break;
+                case "LBRACKET":
+                    if(!isQuoted && !isApost)
+                        unpairedBracket++;
+                    break;
+                case "RBRACKET":
+                    if(!isQuoted && !isApost)
+                        unpairedBracket--;
+                    break;
+            }
+            lexeme = getToken(input, false); //we want the first space
+            input = input.slice(lexeme.length);
+        } //exiting this inner while means we've seen a line break & need to find next line with an instruction
+        toReturn.indented += lexeme.id;
+        input = skipEmptyLines(input);
+        lexeme = getToken(input, false); //we want the first space
+        if(lexeme.type === "END_OF_FILE")
+            notEndOfFile = false;
+        else if(lexeme.type === "SPACE"){
+            compareLength = lexeme.length;
+            input = input.slice(lexeme.length); //remove the spaces from input
+        }else //not a space, next line has 0 indent
+            compareLength = 0;
+        
+    }
+    toReturn.inputSlice = input; //whatever is left of the input is placed in the second part of return
+    
+    return toReturn;
 }
 
 function runtime_error(errorType){ //TODO: flesh out types
