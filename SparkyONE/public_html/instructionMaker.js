@@ -146,6 +146,7 @@ function create_instructions(input){
     //proof of concept
     var lineEnds = ["SEMICOLON", "END_OF_LINE", "END_OF_FILE"];
     var lexeme;
+    var priorPathTruth = false; //used to check elif/else branching options
     while(input.length > 0){
         lineTokens = []; //reset array 
         let instr_line = " ";
@@ -179,7 +180,7 @@ function create_instructions(input){
                 order_assign_statement(lineTokens);
                 lineTokens = [];
                 break;
-            case "IF":
+            case "IF": priorPathTruth = false; //new if statement, reset this value
             case "ELIF":
             case "ELSE":
             case "WHILE":
@@ -203,9 +204,11 @@ function create_instructions(input){
                 pushInstr("Instruction" + instr_line, "", cmdCount, lexeme.line_no, 0); //this pushes the line being resolved before actualy step wise resolution
                 if(lineTokens[0].type === "WHILE")
                     input = order_while_loop(lineTokens, input);
-                else if(lineTokens[0].type === "IF" || lineTokens[0].type === "ELIF" || lineTokens[0].type === "ELSE")
-                    input = order_if_statement(lineTokens, input);
-                else if(lineTokens[0].type === "DEF")
+                else if(lineTokens[0].type === "IF" || lineTokens[0].type === "ELIF" || lineTokens[0].type === "ELSE"){
+                    let vals = order_if_statement(lineTokens, input, priorPathTruth);
+                    input = vals.inputSlice;
+                    priorPathTruth = vals.pathTruth;
+                }else if(lineTokens[0].type === "DEF")
                     input = order_cust_function(lineTokens, input);
                 lineTokens = [];
                 break;
@@ -833,28 +836,47 @@ function order_while_loop(passedTokens, input){
             tokenHolder.push(lexeme);
         }
         instrQueue = createInstrQueue(tokenHolder);
-        takeBranch = stepThroughRawInstr(instrQueue); //re=evaluate the loop condiiton
+        takeBranch = stepThroughRawInstr(instrQueue); //re-evaluate the loop condiiton
     }
     pushInstr("The While loop evaluated to False, don't take the path", "" , cmdCount, lineOfInsidence, 0);
     
     return inputSlice;
 }
 
-function order_if_statement(passedTokens, input){
+function order_if_statement(passedTokens, input, priorPathTruth){
     let instrQueue = createInstrQueue(passedTokens);
     var lineOfInsidence = instrQueue[0].token.line_no;//since the tokens are being dealt with in another method, we need to store the line they occur on
     
-    var takeBranch = stepThroughRawInstr(instrQueue); //this method returns a boolean used to determine if we enter the indents
+    var takeBranch;
+    var inputIndentCode = skip_indented_lines(input);
+    var indented = inputIndentCode.cut_off;
+    var inputSlice = inputIndentCode.inputSlice;
     
-    //resolve the state of the while loop
-    if(takeBranch === "1"){
-        pushInstr("The statement evaluated to True, take the path", "" , cmdCount, lineOfInsidence, 0);
-        //read & store nested instructions for operation
-    }else{
-        pushInstr("The statement evaluated to False, don't take the path", "" , cmdCount, lineOfInsidence, 0);
-        //skip nested instructions
+    if(!priorPathTruth){ //preceding if/elif are false
+        if(instrQueue[0].token.type === "ELSE"){
+            pushInstr("Else statement reached without branching, take branch", "" , cmdCount, lineOfInsidence, 0);
+            create_instructions(indented);
+            priorPathTruth = true;
+        }else{
+            takeBranch = stepThroughRawInstr(instrQueue); //evaluate the instruction line
+            if(takeBranch === "1"){
+                pushInstr("The statement evaluated to True, take the path", "" , cmdCount, lineOfInsidence, 0);
+                create_instructions(indented);
+                priorPathTruth = true;
+            }else{
+                pushInstr("The statement evaluated to False, don't take the path", "" , cmdCount, lineOfInsidence, 0);
+            }
+        }
+    }else{ //an earlier branch was true, ignore branch options
+        pushInstr("An earlier path was true, we do not evaluate this statement", "" , cmdCount, lineOfInsidence, 0);
     }
     
+    let vals = {
+        inputSlice: inputSlice,
+        pathTruth: priorPathTruth
+    };
+    
+    return vals; //return input after the 
 }
 
 function order_cust_Function(passedTokens, input){
