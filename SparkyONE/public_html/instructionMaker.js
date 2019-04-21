@@ -3,7 +3,7 @@ var instrList = new Array(); //global list of instructions
 var funcList = new Array(); //list of callable functions
 var varList = new Array(); //list of declared variables
 var cmdCount = 1; //this is the instruction on, (instr); or (instr)\n should increment this value
-var indentStack = []; //used to keep track of indentations throughout execution
+var indentStack = [0];
 
 var reservedWord = ["True", "False", "None", "abs", "and", "as", "ascii", "assert", "bin", "bool", "break", "ceil", "chr", "class", "cos", 
     "continue", "def", "del", "elif", "else", "except", "float", "floor", "finally", "for", "from", "global", "hex",
@@ -112,6 +112,196 @@ function updateVarType(index, newVarType){
     varList[index].type = newVarType;
 }
 
+var lineTokens = new Array(); //honestly, fuck the fact array.push() adds a pointer so updates to that data type are retroactive the array
+function appendTokenList(item){ //because lexeme is dynamically updated in a list
+    var temp = item;
+    lineTokens.push(temp);
+}
+
+function skipEmptyLines(input){
+    var token = getToken(input, false);
+    var token2;
+    if(token.type === "SPACE" || token.type === "SEMICOLON"){
+        input = input.slice(token.length); //slice off the spaces
+        token2 = getToken(input, false);
+        if(token2.type === "END_OF_LINE"){ //if next is line break, its ok
+            readEmptyLines();
+        }else{ //some keyword was read & the spaces could be indent that need to be read
+            if(token.type === "SPACE"){
+                for(i = 0; i < token.length; i++){
+                    input = " " + input;
+                }
+                //increase_indent();
+            }else{
+                input = token.id + "" + input; //add spliced id back to front of program
+            }
+        }
+    }else if(token.type === "END_OF_LINE"){
+        input = input.slice(token.length);
+        readEmptyLines();
+    }
+    return input;
+}
+
+//unrefined starting class that directs instruction to their according method for complete resolution, currently only directs to assign statements
+function create_instructions(input){
+    //proof of concept
+    var lineEnds = ["SEMICOLON", "END_OF_LINE", "END_OF_FILE"];
+    var lexeme;
+    while(input.length > 0){
+        lineTokens = []; //reset array 
+        let instr_line = " ";
+        lexeme = getToken(input, true);
+        instr_line += lexeme.id + " ";
+        appendTokenList(lexeme);
+        input = input.slice(lexeme.length);
+        let openParenCount = 0;
+        switch(lexeme.type){ //switch to find out which method to jump to, based off CFG
+            case "BINARY": //all of these should cascade to math operation or comparison
+            case "OCTAL":
+            case "HEX":
+            case "NUMBER":
+            case "FLOAT":
+            case "STRING":
+            case "ID": //some assign statement or function call
+                openParenCount = 0;
+                while(!lineEnds.includes(lexeme.type) || openParenCount !== 0){ //a line can be "a = ( 6 + \n 6) a still be treated as a single instruction
+                    lexeme = getToken(input, true);
+                    if(!lineEnds.includes(lexeme.type)){ //don't push a line end token to the list getting resolved, but it will be sliced
+                        instr_line += lexeme.id + " ";
+                        appendTokenList(lexeme);
+                        if(lexeme.type === "LPAREN")
+                            openParenCount++;
+                        if(lexeme.type === "RPAREN")
+                            openParenCount--;
+                    }
+                    input = input.slice(lexeme.length);
+                }
+                pushInstr("Instruction" + instr_line, "", cmdCount, lexeme.line_no, 0); //this pushes the line being resolved before actualy step wise resolution
+                order_assign_statement(lineTokens);
+                lineTokens = [];
+                break;
+            case "IF":
+            case "ELIF":
+            case "ELSE":
+            case "WHILE":
+                openParenCount = 0;
+                while(lexeme.type !== "COLON" || openParenCount !== 0){
+                    lexeme = getToken(input, true);
+                    if(lexeme.type !== "COLON"){
+                        instr_line += lexeme.id + " ";
+                        appendTokenList(lexeme);
+                        if(lexeme.type === "LPAREN")
+                            openParenCount++;
+                        if(lexeme.type === "RPAREN")
+                            openParenCount--;
+                    }
+                    input = input.slice(lexeme.length);
+                }
+                instr_line += lexeme.id + " "; //we want to see : on the instruction, but not he following line break
+                appendTokenList(lexeme);
+                input = input.slice(lexeme.length);
+                lexeme = getToken(input, true); //next should be a linebreak that we don't want on the input
+                input = input.slice(lexeme.length);
+                
+                pushInstr("Instruction" + instr_line, "", cmdCount, lexeme.line_no, 0); //this pushes the line being resolved before actualy step wise resolution
+                if(lineTokens[0].type === "WHILE")
+                    order_while_loop(lineTokens, input);
+                else if(lineTokens[0].type === "IF" || lineTokens[0].type === "ELIF" || lineTokens[0].type === "ELSE")
+                    order_if_statement(lineTokens, input);
+                else if(lineTokens[0].type === "DEF")
+                    order_cust_function(lineTokens, input);
+                lineTokens = [];
+                break;
+            case "SEMICOLON": //usually sliced at end of instruction lnie, this catches ";;"
+            case "SPACE":
+            case "END_OF_LINE": input = skipEmptyLines(input);
+                break;
+            default: console.log("Error");
+                console.log(lexeme.id + " " + lexeme.type);
+                input = input.slice(1);
+                break;
+        }
+        cmdCount++;
+    }
+    return instrList;
+}
+
+function createInstrQueue(passedTokens){
+    var priorityMod = 0; //used to scope priority of () operations
+    var instrQueue = new Array();
+    var tempToken;
+    var tempPriority;
+    var dontQueue = false;
+    for(var x = 0; x < passedTokens.length; x++){ //add passed tokens to instruction queue & priority
+        if(passedTokens[x].type !== "SPACE"){
+            tempToken = passedTokens[x];
+            dontQueue = false;
+            switch(passedTokens[x].type){//used to assign priority
+                case "DEF":
+                case "IF":
+                case "ELIF":
+                case "ELSE":
+                case "WHILE":
+                case "ADD_ASSIGN":
+                case "SUB_ASSIGN":
+                case "MULT_ASSIGN":
+                case "DIV_ASSIGN":
+                case "MOD_ASSIGN":
+                case "ASSIGN_EQUALS": tempPriority = 0 + priorityMod;
+                    priorityMod++; //assigns need to be read right to left, so we increment priority mod for each type assign
+                    break;
+                case "AND":
+                case "OR": tempPriority = 1 + priorityMod;
+                    break;
+                case "NOT": tempPriority = 2 + priorityMod;
+                    break;
+                case "COMPARE_EQUALS": //operations can have comparators, for some reason
+                case "LESS_THAN_EQUAL":
+                case "LESS_THAN":
+                case "GREATER_THAN_EQUAL":
+                case "GREATER_THAN":
+                case "NOT_EQUAL": tempPriority = 3 + priorityMod;
+                    break;
+                case "PLUS":
+                case "MINUS": tempPriority = 4 + priorityMod;
+                    break;
+                case "MULT":
+                case "DIV": tempPriority = 5 + priorityMod;
+                    break;
+                case "MOD":
+                case "EXPONENTIAL": tempPriority = 6 + priorityMod;
+                    break;
+                case "LPAREN": priorityMod += 10; //all parenthised operations need to be executed before a higher priority external instr.
+                    dontQueue = true; //don't push Parens to the Queue
+                    break;
+                case "RPAREN": priorityMod -= 10;
+                    dontQueue = true;
+                    break;
+                case "COMMA": dontQueue = true; //function will have commas, but we dont really care, ex. max(1,2,3)
+                    break;
+                case "COLON": //this should be passed, but it does'nt need to be queued
+                case "SEMICOLON": //these shouldn't be passed at all, but we want to really avoid treating them as instr. by this point
+                case "END_OF_LINE":
+                case "END_OF_FILE": dontQueue = true;
+                    break;
+                default: //ID, number, float, binary, octal, hex
+                    tempPriority = -1;
+                    break;
+
+            }
+            let rawInstr = { //let has scope only within if statement
+                token: tempToken,
+                priority: tempPriority
+            };
+            if(!dontQueue){
+                instrQueue.push(rawInstr);//add the instr to the queue of operations getting resolved
+            }
+        }
+    }
+    return instrQueue;
+}
+
 //priority queue operations
 //finds the index of the largest priority operation & returns that index
 function priorityPop(queue){
@@ -143,190 +333,12 @@ function resolveQueue(index, queue, resolution, prefixLength, suffixLength){
     
 }
 
-var lineTokens = new Array(); //honestly, fuck the fact array.push() adds a pointer so updates to that data type are retroactive the array
-function appendTokenList(item){ //because lexeme is dynamically updated in a list
-    var temp = item;
-    lineTokens.push(temp);
-}
-
-function skipEmptyLines(input){
-    var token = getToken(input, false);
-    var token2;
-    if(token.type === "SPACE" || token.type === "SEMICOLON"){
-        input = input.slice(token.length); //slice off the spaces
-        token2 = getToken(input, false);
-        if(token2.type === "END_OF_LINE"){ //if next is line break, its ok
-            readEmptyLines();
-        }else{ //some keyword was read & the spaces could be indent that need to be read
-            if(token.type === "SPACE"){
-                for(i = 0; i < token.length; i++){
-                    input = " " + input;
-                }
-                //increase_indent(input);
-            }else{
-                input = token.id + "" + input; //add spliced id back to front of program
-            }
-        }
-    }else if(token.type === "END_OF_LINE"){
-        input = input.slice(token.length);
-        readEmptyLines();
-    }
-    return input;
-}
-
-//unrefined starting class that directs instruction to their according method for complete resolution, currently only directs to assign statements
-function create_instructions(input){
-    //proof of concept
-    var lineEnds = ["SEMICOLON", "END_OF_LINE", "END_OF_FILE"];
-    var lexeme;
-    indentStack.push(0);    // if the indentStack is empty it won't work
-    while(input.length > 0){
-        lineTokens = []; //reset array 
-        let instr_line = " ";
-        lexeme = getToken(input, true);
-        instr_line += lexeme.id + " ";
-        appendTokenList(lexeme);
-        input = input.slice(lexeme.length);
-        switch(lexeme.type){ //switch to find out which method to jump to, based off CFG
-            case "BINARY": //all of these should cascade to math operation or comparison
-            case "OCTAL":
-            case "HEX":
-            case "NUMBER":
-            case "FLOAT":
-            case "STRING":
-            case "ID": //some assign statement or function call
-                while(!lineEnds.includes(lexeme.type)){
-                    lexeme = getToken(input, true);
-                    if(!lineEnds.includes(lexeme.type)){ //don't push a line end token to the list getting resolved, but it will be sliced
-                        instr_line += lexeme.id + " ";
-                        appendTokenList(lexeme);
-                    }
-                    input = input.slice(lexeme.length);
-                }
-                pushInstr("Instruction" + instr_line, "", cmdCount, lexeme.line_no, 0); //this pushes the line being resolved before actualy step wise resolution
-                order_assign_statement(lineTokens);
-                lineTokens = [];
-                break;
-            case "WHILE":
-                while(lexeme.type !== "COLON"){
-                    lexeme = getToken(input, true);
-                    if(lexeme.type !== "COLON"){
-                        instr_line += lexeme.id + " ";
-                        appendTokenList(lexeme);
-                    }
-                    input = input.slice(lexeme.length);
-                }
-                instr_line += lexeme.id + " "; //we want to see : on the instruction, but not he following line break
-                appendTokenList(lexeme);
-                input = input.slice(lexeme.length);
-                lexeme = getToken(input, true); //next should be a linebreak that we don't want on the input
-                input = input.slice(lexeme.length);
-                
-                pushInstr("Instruction" + instr_line, "", cmdCount, lexeme.line_no, 0); //this pushes the line being resolved before actualy step wise resolution
-                order_while_loop(lineTokens);
-                lineTokens = [];
-                break;
-            case "IF":
-                break;
-            case "SEMICOLON": //usually sliced at end of instruction lnie, this catches ";;"
-            case "SPACE":
-            case "END_OF_LINE": input = skipEmptyLines(input);
-                break;
-            default: console.log("Error");
-                console.log(lexeme.id + " " + lexeme.type);
-                input = input.slice(1);
-                break;
-        }
-        cmdCount++;
-    }
-    return instrList;
-}
-
-/*
- This will convert the passed tokens into a priority queue of atomic operations. It will then iterate
-through the operations and resolve them 1 at a time, pushing them to the instruction queue that gets returned
-until there is only 1 token left to resolve. This method does not push the instructions, but calls methods that
-push the appropriate syntax for operations. While it's called assign it can also handle standalone ops, like 3+3 or 4 == 5
- */
-function order_assign_statement(passedTokens){
-    var priorityMod = 0; //used to scope priority of () operations
-    var instrQueue = new Array();
-    var tempToken;
-    var tempPriority;
-    var dontQueue = false;
-    for(var x = 0; x < passedTokens.length; x++){ //add passed tokens to instruction queue & priority
-        if(passedTokens[x].type !== "SPACE"){
-            tempToken = passedTokens[x];
-            dontQueue = false;
-            switch(passedTokens[x].type){//used to assign priority
-                case "AND":
-                case "OR": tempPriority = 1 + priorityMod;
-                    break;
-                case "NOT": tempPriority = 2 + priorityMod;
-                    break;
-                case "COMPARE_EQUALS": //operations can have comparators, for some reason
-                case "LESS_THAN_EQUAL":
-                case "LESS_THAN":
-                case "GREATER_THAN_EQUAL":
-                case "GREATER_THAN":
-                case "NOT_EQUAL": tempPriority = 3 + priorityMod;
-                    break;
-                case "PLUS":
-                case "MINUS": tempPriority = 4 + priorityMod;
-                    break;
-                case "MULT":
-                case "DIV": tempPriority = 5 + priorityMod;
-                    break;
-                case "MOD":
-                case "EXPONENTIAL": tempPriority = 6 + priorityMod;
-                    break;
-                case "ADD_ASSIGN":
-                case "SUB_ASSIGN":
-                case "MULT_ASSIGN":
-                case "DIV_ASSIGN":
-                case "MOD_ASSIGN":
-                case "ASSIGN_EQUALS": tempPriority = 0 + priorityMod;
-                    priorityMod++; //assigns need to be read right to left, so we increment priority mod for each type assign
-                    break;
-                case "LPAREN": priorityMod += 10; //all parenthised operations need to be executed before a higher priority external instr.
-                    dontQueue = true; //don't push Parens to the Queue
-                    break;
-                case "RPAREN": priorityMod -= 10;
-                    dontQueue = true;
-                    break;
-                case "COMMA": dontQueue = true; //function will have commas, but we dont really care, ex. max(1,2,3)
-                    break;
-                case "SEMICOLON": //these shouldn't be passed at all, but we want to really avoid treating them as instr. by this point
-                case "END_OF_LINE":
-                case "END_OF_FILE": dontQueue = true;
-                    break;
-                default: //ID, number, float, binary, octal, hex
-                    tempPriority = -1;
-                    break;
-
-            }
-            let rawInstr = { //let has scope only within if statement
-                token: tempToken,
-                priority: tempPriority
-            };
-            if(!dontQueue){
-                instrQueue.push(rawInstr);//add the instr to the queue of operations getting resolved
-            }
-        }
-    }
-    
-    for(var x = 0; x < instrQueue.length; x++){
-        document.getElementById("outputField").value += instrQueue[x].token.id + " ";
-    }
-    document.getElementById("outputField").value += "\n";
-    for(var x = 0; x < instrQueue.length; x++){
-        document.getElementById("outputField").value += instrQueue[x].priority.toString() + " ";
-    }
-    document.getElementById("outputField").value += "\n";
+function stepThroughRawInstr(instrQueue){
+    var takeBranch = false; //used for while, if, elif
     
     var opIndex = 1;
     var currentOp;
-    //the variables being operated upon might take more than 1 token, such as abs ( -3 )
+    //the variables being operated upon might take more than 1 token, such as "abs ( -3 )"
     var val1 = [];
     var val2 = [];
     var prefixLength = 0;
@@ -337,7 +349,10 @@ function order_assign_statement(passedTokens){
     var mathOps = ["PLUS", "MINUS", "MULT", "DIV", "MOD"]; //list of operations that can be resolved in an assign statement before assigning
     var compareOps = ["COMPARE_EQUALS", "LESS_THAN", "LESS_THAN_EQUAL", "GREATER_THAN", "GREATER_THAN_EQUAL", "NOT_EQUAL"];
     var logicalOps = ["AND", "OR", "NOT"];
-    while(instrQueue.length > 1){ //assignments should resolve down to a single vlaue remaining (and it is what was assigned to a variable)
+    var assignOps = ["ADD_ASSIGN", "SUB_ASSIGN", "MULT_ASSIGN", "DIV_ASSIGN", "MOD_ASSIGN", "ASSIGN_EQUALS"];
+    var branchOps = ["WHILE", "IF", "ELIF"];
+    var numTypes = ["FLOAT", "NUMBER"];
+    while(instrQueue.length > 1 || instrQueue[0].token.type === "ELSE"){ //assignments should resolve down to a single vlaue remaining (and it is what was assigned to a variable)
         // get the tokens operated on
         //get the next priority operation
         opIndex = priorityPop(instrQueue);
@@ -394,7 +409,6 @@ function order_assign_statement(passedTokens){
             console.log(val2[y].id);*/
         
         if(suffixLength !== 0){
-            //val2 = instrQueue[opIndex + 1].token;
             //resolve preceding operations on the token
             for(let y = 0; y < suffixLength; y++){ //iterate through the suffix and resolve preceding "--+-" strings
                 if(val2[y].id.charAt(0) === "+" || val2[y].id.charAt(0) === "-"){
@@ -404,13 +418,144 @@ function order_assign_statement(passedTokens){
             }
         }
         
-        //need to check there isn't an instance of 3 + --(-2), because the "-" in "+--" is seens a subtraction w/out operators & should be concat to -2
-        if(prefixLength === 0 && suffixLength === 0){
+        if((currentOp.type === "PLUS" || currentOp.type === "MINUS") && suffixLength === 0 && prefixLength === 0){ //special case of instance like "-(--(4))" where it is mistakenly seeing N/A - N/A
             //we need to resolve the instrQueue to account for incorrect - & + before a number
+            console.log("Case A");
+            validOp = false; //we are going to do some hands on changes that can't be sent to functions to do actual operations
+            hasPrefixLength = hasSuffixLength = false;
+            let precedeOp = ["+","-"];
+            let unassignedOps = currentOp.id + ""; //these will be concat to the front of the next id/number token
             tmpIndex = opIndex + 1;
+            while(!hasSuffixLength){ //retiterate over tokens after op token
+                if(tmpIndex < instrQueue.length){
+                    if(precedeOp.includes(instrQueue[tmpIndex].token.id)){//found another +/-
+                        suffixLength++;
+                        unassignedOps += instrQueue[tmpIndex].token.id;
+                        tmpIndex++;
+                    }else if(instrQueue[tmpIndex].priority === -1){//found correct suffix op
+                        suffixLength++;
+                        val2.push(instrQueue[tmpIndex].token); //push this new token to val2 list
+                        tmpIndex++;
+                    }else{ //if niether, end of potential suffix
+                        hasSuffixLength = true;
+                        tmpIndex--; //decrement back to last valid token
+                    }
+                }else{ //outside the length of the queue
+                    hasSuffixLength = true;
+                    tmpIndex--; //return to last legal index
+                }
+            }
+            let newToken;
+            if(suffixLength > 0){
+                if(numTypes.includes(val2[0].type)){ //this checks if the new suffix is a token like "--2"
+                    //in which case it isn't a built in function and we can append the missing +/- to the head and resolve
+                    val2[0].id = unassignedOps + "" + val2[0].id;
+                    val2[0].id = resolvePrecedingOperators(val2[0]);
+                    newToken = convertTokenToValue(val2); //convert result to get resolution fields
+                }else{ //not a simple float or number, needs to be converted
+                    newToken = convertTokenToValue(val2); //convert the token to a number (could be 0b10 or even abs(2))
+                    let tmpToken = getToken(newToken.value + "", false); //convert that return to a token
+                    val2 = [];
+                    val2.push(tmpToken); //push this token val2
+                    val2[0].id = unassignedOps + "" + val2[0].id; //resolve it like a number now
+                    val2[0].id = resolvePrecedingOperators(val2[0]);
+                    newToken = convertTokenToValue(val2);
+                }
+            }//else error detected
+            
+            var resolution = {
+                result: newToken.value + "",
+                type: newToken.type
+            };
+            
+        }else if((mathOps.includes(currentOp.type) || compareOps.includes(currentOp.type) || logicalOps.includes(currentOp.type) || assignOps.includes(currentOp.type)) && suffixLength === 0){ //special case of instances like "3-(--(-4))" where it mistakenly sees 3 - N/A
+            console.log("Case B");
+            validOp = true; //this one is just getting the appropriate suffix & can then continue the operation
             hasSuffixLength = false;
+            let precedeOp = ["+","-"];
             let unassignedOps = ""; //these will be concat to the front of the next id/number token
-            //TODO
+            tmpIndex = opIndex + 1;
+            console.log(currentOp.type);
+            while(!hasSuffixLength){ //retiterate over tokens after op token
+                if(tmpIndex < instrQueue.length){
+                    if(precedeOp.includes(instrQueue[tmpIndex].token.id)){//found another +/-
+                        suffixLength++;
+                        unassignedOps += instrQueue[tmpIndex].token.id;
+                        tmpIndex++;
+                    }else if(instrQueue[tmpIndex].priority === -1){//found correct suffix op
+                        suffixLength++;
+                        val2.push(instrQueue[tmpIndex].token); //push this new token to val2 list
+                        tmpIndex++;
+                    }else{ //if niether, end of potential suffix
+                        hasSuffixLength = true;
+                        tmpIndex--; //decrement back to last valid token
+                    }
+                }else{ //outside the length of the queue
+                    hasSuffixLength = true;
+                    tmpIndex--; //return to last legal index
+                }
+            }
+            let newToken, tmpToken;
+            let isNeg = false;
+            if(suffixLength > 0){
+                if(numTypes.includes(val2[0].type)){ //this checks if the new suffix is a token like "--2"
+                    //in which case it isn't a built in function and we can append the missing +/- to the head and resolve
+                    val2[0].id = unassignedOps + "" + val2[0].id;
+                    val2[0].id = resolvePrecedingOperators(val2[0]);
+                    if(val2[0].id.charAt(0) === "-"){
+                        val2[0].id = val2[0].id.slice(1,val2[0].id.length); //if the "-" is left on it will return the wrong token in the next step
+                        isNeg = true;
+                    }
+                    tmpToken = convertTokenToValue(val2);
+                    newToken = getToken(tmpToken.value + "", false); //convert result to a token since we proceed with operation after this conversion
+                }else{ //not a simple float or number, needs to be converted
+                    newToken = convertTokenToValue(val2); //convert the token to a number (could be 0b10 or even abs(2))
+                    let tmpToken = getToken(newToken.value + "", false); //convert that return to a token
+                    val2 = [];
+                    val2.push(tmpToken); //push this token val2
+                    val2[0].id = unassignedOps + "" + val2[0].id; //resolve it like a number now
+                    val2[0].id = resolvePrecedingOperators(val2[0]);
+                    if(val2[0].id.charAt(0) === "-"){
+                        val2[0].id = val2[0].id.slice(1,val2[0].id.length); //if the "-" is left on it will return the wrong token in the next step
+                        isNeg = true;
+                    }
+                    tmpToken = convertTokenToValue(val2);
+                    newToken = getToken(tmpToken.value + "", false);
+                }
+            }//else error detected
+            if(isNeg) //return any "-" that was sliced off
+                newToken.id = "-" + newToken.id;
+            val2 = []; //clear the val2 array
+            val2.push(newToken); //push the new token genrated
+            
+        }else if((currentOp.type === "PLUS" || currentOp.type === "MINUS") && prefixLength === 0){ //instance where it reads something like "a = -(2)" and tries N/A - 2
+            console.log("Case C");
+            validOp = false;
+            let precedeOp = ["+","-"];
+            let unassignedOps = currentOp.id + "";
+            let newToken;
+            if(suffixLength > 0){
+                if(numTypes.includes(val2[0].type)){ //this checks if the new suffix is a token like "--2"
+                    //in which case it isn't a built in function and we can append the missing +/- to the head and resolve
+                    val2[0].id = unassignedOps + "" + val2[0].id;
+                    val2[0].id = resolvePrecedingOperators(val2[0]);
+                    newToken = convertTokenToValue(val2); //convert result to get resolution fields
+                }else{ //not a simple float or number, needs to be converted
+                    newToken = convertTokenToValue(val2); //convert the token to a number (could be 0b10 or even abs(2))
+                    let tmpToken = getToken(newToken.value + "", false); //convert that return to a token
+                    val2 = [];
+                    val2.push(tmpToken); //push this token val2
+                    val2[0].id = unassignedOps + "" + val2[0].id; //resolve it like a number now
+                    val2[0].id = resolvePrecedingOperators(val2[0]);
+                    newToken = convertTokenToValue(val2);
+                }
+            }//else error detected
+            
+            var resolution = {
+                result: newToken.value + "",
+                type: newToken.type
+            };
+            
         }else{ //there was a prefix or suffix to perform the operation upon
             validOp = true;
         }
@@ -418,28 +563,29 @@ function order_assign_statement(passedTokens){
         //perform the operation
         if(validOp){
             if(mathOps.includes(currentOp.type)){ //if the next prioritized operation is math, go to resolve Math
-                /*NEEDS UPDATE, if((currentOp.type === "PLUS" || currentOp.type === "MINUS") && prefixLength === 0){ //special check case of -(-2) where the "-" outside paren is seen as a minus
-                    val2.id = currentOp.id + val2.id; //concat the op to the front of the value
-                    let newVal = resolvePrecedingOperators(val2); //resolve it like a normal -- or -+ instance
-                    val2.id = newVal;
-                    resolution = {
-                        result: val2.id + "",
-                        type: val2.type
-                    };
-                }else*/
-                    resolution = resolveMath(val1, currentOp, val2);
+                resolution = resolveMath(val1, currentOp, val2);
             }else if(compareOps.includes(currentOp.type)){ //check if it is a comparator
                 resolution = resolveCompare(val1, currentOp, val2);
             }else if(logicalOps.includes(currentOp.type)){
                 resolution = resolveLogicalOp(val1, currentOp, val2);
                 if(currentOp.type === "NOT")
                     prefixLength = 0; //even if a valid token was in front of "not" it didn't actually perform in this operation
-            }else{ //else it assumed to be an assignment statement
+            }else if(branchOps.includes(currentOp.type)){
+                resolution = resolve_value_True_or_False(val2);
+                takeBranch = resolution.result;
+            }else if(currentOp.type === "ELSE"){
+                var resolution = {
+                    result: 1 + "",
+                    type: "TRUE"
+                };
+                takeBranch = resolution.result;
+            }else if(assignOps.includes(currentOp.type)){ //else it assumed to be an assignment statement
                 resolution = resolveAssign(val1, currentOp, val2);
-            }
+            }//else if "def"
         }
         //regardless of op validity, a resolution is needed
         resolveQueue(opIndex, instrQueue, resolution, prefixLength, suffixLength); //remove these tokens & replace with ID for the resolution
+        
         
         //for debugging purposes
         for(var x = 0; x < instrQueue.length; x++){
@@ -452,119 +598,67 @@ function order_assign_statement(passedTokens){
         document.getElementById("outputField").value += "\n";
         
     }
+    
+    return takeBranch;
+}
+
+/*
+ This will convert the passed tokens into a priority queue of atomic operations. It will then iterate
+through the operations and resolve them 1 at a time, pushing them to the instruction queue that gets returned
+until there is only 1 token left to resolve. This method does not push the instructions, but calls methods that
+push the appropriate syntax for operations. While it's called assign it can also handle standalone ops, like 3+3 or 4 == 5
+ */
+function order_assign_statement(passedTokens){
+    
+    var instrQueue = createInstrQueue(passedTokens);
+        
+    stepThroughRawInstr(instrQueue);
+    
     instrQueue = []; //for added measure, there should only be 1 token in the queue but it never hurts to empty it at conclusion
 }
 
-/*function order_while_loop(passedTokens){ //not properly updated for code changes made from 3/27
-    var priorityMod = 0; //used to scope priority of operations
-    var instrQueue = new Array();
-    var tempToken;
-    var tempPriority;
-    var dontQueue = false;
-    for(var x = 0; x < passedTokens.length; x++){ //add passed tokens to instruction queue & priority
-        if(passedTokens[x].type !== "SPACE"){
-            tempToken = passedTokens[x];
-            dontQueue = false;
-            switch(passedTokens[x].type){//used to assign priority
-                case "AND":
-                case "OR":
-                case "NOT": tempPriority = 1 + priorityMod;
-                    break;
-                case "COMPARE_EQUALS": //operations can have comparators, for some reason
-                case "LESS_THAN_EQUAL":
-                case "LESS_THAN":
-                case "GREATER_THAN_EQUAL":
-                case "GREATER_THAN":
-                case "NOT_EQUAL": tempPriority = 2 + priorityMod; //compares are that last things executed in this kind of operation
-                    break;
-                case "PLUS":
-                case "MINUS": tempPriority = 3 + priorityMod;
-                    break;
-                case "MULT":
-                case "DIV": tempPriority = 4 + priorityMod;
-                    break;
-                case "MOD":
-                case "EXPONENTIAL": tempPriority = 5 + priorityMod;
-                    break;
-                case "LPAREN": priorityMod += 10; //all parenthised operations need to be executed before a higher priority external instr.
-                    dontQueue = true;
-                    break;
-                case "RPAREN": priorityMod -= 10;
-                    dontQueue = true;
-                    break;
-                case "COLON": //this should be passed, but it does'nt need to be queued
-                case "END_OF_LINE": dontQueue = true; //this shouldn't be passed to begin with, but ensure it isn't queued
-                    break;
-                default: //ID, number, boolean, While, etc.
-                    tempPriority = -1;
-                    break;
-
-            }
-            let rawInstr = { //let has scope only within if statement
-                token: tempToken,
-                priority: tempPriority
-            };
-            if(!dontQueue){
-                instrQueue.push(rawInstr);//add the instr to the queue of operations getting resolved
-            }
-        }
-    }
+function order_while_loop(passedTokens, input){
+    var instrQueue = createInstrQueue(passedTokens);
+    var lineOfInsidence = instrQueue[0].token.line_no;//since the tokens are being dealt with in another method, we need to store the line they occur on
     
-    for(var x = 0; x < instrQueue.length; x++){
-        document.getElementById("outputField").value += instrQueue[x].token.id + " ";
-    }
-    document.getElementById("outputField").value += "\n";
-    for(var x = 0; x < instrQueue.length; x++){
-        document.getElementById("outputField").value += instrQueue[x].priority.toString() + " ";
-    }
-    document.getElementById("outputField").value += "\n";
+    var takeBranch = stepThroughRawInstr(instrQueue); //this method returns a boolean used to determine if we stay in the loop
     
-    var opIndex = 1;
-    var currentOp;
-    var val1;
-    var val2;
-    var resolution;
-    var mathOps = ["PLUS", "MINUS", "MULT", "DIV", "MOD"]; //list of operations that can be resolved in an assign statement before assigning
-    var compareOps = ["COMPARE_EQUALS", "LESS_THAN", "LESS_THAN_EQUAL", "GREAT_THAN", "GREATER_THAN_EQUAL", "NOT_EQUAL"];
-    var logicalOps = ["AND", "OR", "NOT"];
-    while(instrQueue.length > 2){ //while loops should boil down to "while ____" (the unfilled should be some boolean or value)
-        // get the 3 tokens operated on
-        opIndex = priorityPop(instrQueue);
-        val1 = instrQueue[opIndex-1].token;
-        currentOp = instrQueue[opIndex].token;
-        val2 = instrQueue[opIndex+1].token;
-        //resolve any preceding negatives on these values
-        if(val1.id.charAt(0) === "+" || val1.id.charAt(0) === "-"){
-            let newVal = resolvePrecedingOperators(val1); //pass token, return string to update the value
-            val1.id = newVal;
-        }
-        if(val2.id.charAt(0) === "+" || val2.id.charAt(0) === "-"){
-            let newVal = resolvePrecedingOperators(val2); //pass token, return string to update the value
-            val2.id = newVal;
-        }
-        //perform the operation
-        if(mathOps.includes(currentOp.type)){ //if the next prioritized operation is math, go to resolve Math
-            resolution = resolveMath(val1, currentOp, val2);
-        }else if(compareOps.includes(currentOp.type)){ //check if it is a comparator
-            resolution = resolveCompare(val1, currentOp, val2);
-        }else if(logicalOps.includes(currentOp.type)){
-            resolution = resolveLogicalOp(val1, currentOp, val2);
-        }//else a potential error
-        resolveQueue(opIndex, instrQueue, resolution); //remove these 3 tokens & replace with ID for the resolution
-    }
     //resolve the state of the while loop
-    val1 = instrQueue[1].token; //at this point its only "while ____";
-    var takeBranch = resolve_value_True_or_False(val1);
-    if(takeBranch){
-        pushInstr("The While loop evaluated to True, take the path", "" , cmdCount, val1.line_no, 0);
-        //read & store nested instructions
+    if(takeBranch === "1"){
+        pushInstr("The While loop evaluated to True, take the path", "" , cmdCount, lineOfInsidence, 0);
+        //read & store nested instructions for operation
     }else{
-        pushInstr("The While loop evaluated to False, don't take the path", "" , cmdCount, val1.line_no, 0);
+        pushInstr("The While loop evaluated to False, don't take the path", "" , cmdCount, lineOfInsidence, 0);
         //skip nested instructions
     }
     //check conditional & possibly loop again
     
-}*/
+}
+
+function order_if_statement(passedTokens, input){
+    var instrQueue = createInstrQueue(passedTokens);
+    var lineOfInsidence = instrQueue[0].token.line_no;//since the tokens are being dealt with in another method, we need to store the line they occur on
+    
+    var takeBranch = stepThroughRawInstr(instrQueue); //this method returns a boolean used to determine if we enter the indents
+    
+    //resolve the state of the while loop
+    if(takeBranch === "1"){
+        pushInstr("The statement evaluated to True, take the path", "" , cmdCount, lineOfInsidence, 0);
+        //read & store nested instructions for operation
+    }else{
+        pushInstr("The statement evaluated to False, don't take the path", "" , cmdCount, lineOfInsidence, 0);
+        //skip nested instructions
+    }
+    
+}
+
+function order_cust_Function(passedTokens, input){
+    var instrQueue = createInstrQueue(passedTokens);
+    var lineOfInsidence = instrQueue[0].token.line_no;//since the tokens are being dealt with in another method, we need to store the line they occur on
+    
+    var takeBranch = stepThroughRawInstr(instrQueue); //this method returns a boolean used to determine if we stay in the loop
+    
+}
 
 function resolvePrecedingOperators(resolveToken){ //step by step resolution of "++--+#"
     var resolved;
@@ -808,7 +902,18 @@ function resolveMath(val1, op, val2){
             resolved = num1 % num2;
             break;
     }
-    instr = num1 + " " + op.id + " " + num2;
+    instr = "";
+    if(tokenVal1.type !== "TRUE" && tokenVal1.type !== "FALSE" && tokenVal1.type !== "NONE"){
+        instr += num1 + " ";
+    }else{
+        instr += tokenVal1.type + " ";
+    }
+    instr += op.id + " ";
+    if(tokenVal2.type !== "TRUE" && tokenVal2.type !== "FALSE" && tokenVal2.type !== "NONE"){
+        instr += num2 + " ";
+    }else{
+        instr += tokenVal2.type + " ";
+    }
     //push the math operation performed
     pushInstr("Operation " + instr, " is resolved to " + resolved, cmdCount, lineN, 0);
     var resultType = getResultType(tokenVal1, op, tokenVal2); //check result type & if passed types are comapatible with that operation
@@ -998,6 +1103,10 @@ function resolveAssign(val1, op, val2){
             resolved = intermediateRes.result + " assigned to variable \"" + val1[0].id + "\"";
             break;
     }
+    if(newVarType === "TRUE" || newVarType === "FALSE" || newVarType === "NONE"){
+        instr = val1[0].id + " = " + newVarType;
+        resolved = newVarType + " assigned to variable \"" + val1[0].id + "\"";
+    }
     if(val1[0].type === "ID"){ //update the variable that had a nmuber assigned to it
         index = varIsDeclared(val1[0].id);
         if(index === -1){//new variable
@@ -1019,11 +1128,14 @@ function resolveAssign(val1, op, val2){
 
 //called on conditionals, such as if, elif, or while
 function resolve_value_True_or_False(passedVal){
-    var tokenValue = convertTokenToValue(passedVal).value;
-    var isTrue = true;
-    if(tokenValue === 0)
-        isTrue = false;
-    return isTrue;
+    var convertToken = convertTokenToValue(passedVal);
+    
+    var resolution = {
+        result: convertToken.value + "",
+        type: convertToken.type
+    };
+    
+    return resolution;
 }
 
 
@@ -1055,114 +1167,229 @@ function resolve_built_ins(token)
     return res;
 }
 
-
-
-// will check the current token and push a new indentation onto the stack
-// Meant to be called after a colon :
-// Assumed that the syntax is correct and this will be type SPACE
-function increase_indent(input){
-    var token = getToken(input, false);
-    current = indentStack.pop();
-    
-    if(current === token.length){
-        indentStack.push(current);
-    } else {
-        indentStack.push(current);
-        indentStack.push(token.length);
-    }   
-    input = input.slice(token.length);
-    return input;
-}
-
-/*
- * will skip all lines at current and greater indentation until dedent
- * will return input
- * Idea: return [input, skipped] where skipped is an arraylist of lines that
- *              skip_one_line removed
- *              could also only be calculated if True/False passed when this function is called
- *              if not just empty list
- */
 function skip_indented_lines(input){
     var token = getToken(input, false);
-    var skip_length = indentStack.pop();    // Should get latest item from indentStack
+    var skip_length = token.length;
     var current_length = token.length;
+    var cut_off = "";
+    var start_line = token.line_no;
     
-    while(skip_length < current_length){
-        input = skip_one_line(input);
+    while(current_length >= skip_length && token.type !== "END_OF_FILE"){
+        var two_items = skip_one_line(input);
+        input = two_items[0];
+        cut_off = cut_off + two_items[1];
+        //document.getElementById("outputField").value += "Portion Cut Off: \n" + cut_off + "\n";
+        //document.getElementById("outputField").value += "Input Left: " + input + "\n\n\n";
         token = getToken(input, false);
         if(token.type === "SPACE"){
             current_length = token.length;
+            var i;
+            for(i = 0; i < token.length; i++){
+                cut_off = cut_off + " ";
+            }
             input = input.slice(token.length);
-        } else { 
+            token = getToken(input, false);
+        } else if(token.type === "TAB"){
+            current_length = token.length;
+            input = input.slice(1);
+            cut_off = cut_off + token.id;
+            token = getToken(input, false);
+        }else if(token.type === "END_OF_LINE"){ 
+            //current_length = 0;
+            cut_off = cut_off + token.id;
+        } else {
             current_length = 0;
         }
     }
-    indentStack.push(skip_length);
-    check_indent(input);                    // Should handle indent stack if multiple dedents occur
-    return input;
+    return [input, cut_off, start_line];
 }
 
 function skip_one_line(input){
     var token = getToken(input, false);
-    var multiLine = ["LPAREN", "LBRACE", "LBRACKET"];
+    var multiLine = ["LPAREN", "LBRACE", "LBRACKET", "QUOTE", "TAB", "RPAREN", "RBRACE", "RBRACKET", "SPACE"];
+    var lineEnds = ["END_OF_LINE", "END_OF_FILE"];
     
-    //this may be a problem as the end of line may be something like
-    /*
-     * t = [1   , 3, 2,
-     *          5,  6,]
-     * so I will have to figure out how to skip that when possible --> 
-     *      the indentation be shorter is the problem
-     *      Switch statement is attempt to remedy this --> could be used for multiline comments too
-     *      
-     * Another thing while researching implicit Line Continuation, apparently
-     *      \ can be used for explicit line continuation --> need to add to lexer
-     *      not currently implemented here
-     */
-    while(token.type === "END_OF_LINE"){
+    var openParenCount = 0;
+    var openBraceCount = 0;
+    var openBracketCount = 0;
+    
+    var spliced_line = "";
+
+    
+    while(!lineEnds.includes(token.type) || openParenCount !== 0 || openBraceCount !== 0 || openBracketCount !== 0){
         if(multiLine.includes(token.type)){
-            //is possibly a multiline item --> possibly include triple quotes?
             switch(token.type){
                 case "LPAREN":
-                    while(token.type !== "RPAREN"){
-                        input = token.slice(token.length);
-                        token = getToken(input, false);
-                    }
+                    openParenCount++;
+                    spliced_line = spliced_line + token.id;
+                    input = input.slice(token.length);
+                    token = getToken(input, false);
                     break;
+
                 case "LBRACE":
-                    while(token.type !== "RBRACE"){
-                        input = token.slice(token.length);
-                        token = getToken(input, false);
-                    }
+                    openBraceCount++;
+                    spliced_line = spliced_line + token.id;
+                    input = input.slice(token.length);
+                    token = getToken(input, false);
+                    break;
+
+                case "LBRACKET":
+                    openBracketCount++;
+                    spliced_line = spliced_line + token.id;
+                    input = input.slice(token.length);
+                    token = getToken(input, false);
+                    break;
+
+                case "QUOTE":
+                    // slice off quotes in another function
+                    spliced_line = spliced_line + token.id;
+                    input = input.slice(token.length);
+                    token = getToken(input, false);
+                    var result = skip_quote(input);
+                    input = result[0];
+                    spliced_line = spliced_line + result[1];
+                    document.getElementById("outputField").value +="skip_one_line: " + spliced_line +"\n";
+                    
+                    token = getToken(input, false);
+                    document.getElementById("outputField").value +="skip_one_line: " + token.id +"\n";
+                    break;
+
+                case "TAB":
+                    spliced_line = spliced_line + token.id;
+                    input = input.slice(1);
+                    token = getToken(input, false);
+                    break;
+
+                case "RPAREN":
+                    openParenCount--;
+                    spliced_line = spliced_line + token.id;
+                    input = input.slice(token.length);
+                    token = getToken(input, false);
+                    break;
+
+                case "RBRACE":
+                    openBraceCount--;
+                    spliced_line = spliced_line + token.id;
+                    input = input.slice(token.length);
+                    token = getToken(input, false);
+                    break;
+
+                case "RBRACKET":
+                    openBracketCount--;
+                    spliced_line = spliced_line + token.id;
+                    input = input.slice(token.length);
+                    token = getToken(input, false);
                     break;
                     
-                case "LBRACKET":
-                    while(token.type !== "RBRACKET"){
-                        input = token.slice(token.length);
-                        token = getToken(input, false);
+                case "SPACE":
+                    var i;
+                    for(i = 0; i < token.length; i++){
+                        spliced_line = spliced_line += " ";
                     }
-                    break;
-                default:
-                    break;
-            } // end switch
-        }// end if
-        input = token.slice(token.length);
-        token = getToken(input, false);
-    }// end while
+                    input = input.slice(token.length);
+                    token = getToken(input, false);
+                    break; 
+                    
+            } // end switch statement
+        } else {
+            // If not a character that needs to be handled just remove
+            spliced_line = spliced_line + token.id;
+            input = input.slice(token.length);
+            token = getToken(input, false);
+        } // end if
+    } //end while
+    
+    if(token.type !== "END_OF_FILE"){
+        spliced_line = spliced_line + token.id;
+    }
+    input = input.slice(token.length);
+    return [input, spliced_line];
 }
 
-function check_indents(input){
+function skip_quote(input){
+    //should have one quote at this point 
     var token = getToken(input, false);
+    var spliced = token.id;
+    var saved = token.id;
+    document.getElementById("outputField").value += "skip_quote called\n";
+    var match_found = false;
     
-    if(indentStack.length !== 1){           // if indentStack.length == 1 then should be no indents
-        var current = indentStack.pop();
-        if(token.type === "SPACE"){
-            if(token.length < current[1]){
-                check_indents(input);
-            } else if(token.length === current[1]){
-                input = input.slice(token.length);
-                indentStack.push(current[1]);
-            }
+    if(token.type === "QUOTE"){
+        //second quote
+        input = input.slice(token.length);
+        token = getToken(input, false);
+        document.getElementById("outputField").value += "Two Quotes; Next Token: " + token.type + "\n";
+        if(token.type === "QUOTE"){
+            //third quote -> run until three quotes again
+            saved = saved + token.id;
+            while(!match_found){
+                token = getToken(input, false);
+                if(token.type === "QUOTE"){
+                    //one quote
+                    spliced = spliced + token.id;
+                    input = input.slice(token.length);
+                    token = getToken(input);
+                    if(token.type === "QUOTE"){
+                        spliced = spliced + token.id;
+                        input = input.slice(token.length);
+                        token = getToken(input);
+                        if(token.type === "QUOTE"){
+                            match_found = true;
+                            spliced = spliced + token.id;
+                            input = input.slice(token.length);
+                        } else {
+                            spliced = spliced + token.id;
+                            input = input.slice(token.length);
+                        } // end third quote if
+                    } else {
+                        spliced = spliced + token.id;
+                        input = input.slice(token.length);
+                    } // end second quote if
+                } else {
+                    spliced = spliced + token.id;
+                    input = input.slice(token.length);
+                } // end first quote if
+            }// end while
+        }// end if
+        // if there are only two quotes, nothing needs to be done
+    } else {
+        // only one quote, run until matching quote then return
+        input = input.slice(token.length);
+        token = getToken(input, false);
+        while(token.type !== "QUOTE"){
+            spliced = spliced + token.id;
+            input = input.slice(token.length);
+            token = getToken(input, false);
         }
+        input = input.slice(token.length);
+        spliced = spliced + token.id;
     }
     
+    return [input, spliced];
+}
+
+
+function test_indent(input){
+    var token = getToken(input, false); 
+    //document.getElementById("outputField").value += "Test 1\n";
+    if(token.type === "WHILE"){
+        input = input.slice(token.length);
+        document.getElementById("outputField").value += "Test 2\n";
+        while(token.type !== "END_OF_LINE"){
+            //document.getElementById("outputField").value +="Test " + token.type +"\n";
+            token = getToken(input, false);
+            input = input.slice(token.length);
+        }
+        
+        var two_items = skip_indented_lines(input);
+        input = two_items[0];
+        document.getElementById("outputField").value += "Input: " + input + "\n";
+        document.getElementById("outputField").value += "Sliced off: \n" + two_items[1];
+        document.getElementById("outputField").value += "\nExit\n\n\n";
+        
+        //return first line you start at why
+        //document.getElementById("outputField").value +=;
+    } else {
+        //document.getElementById("outputField").value += token.type;
+    }
 }

@@ -711,7 +711,7 @@ function getToken(input, updateLastToken){
     var operators = ["PLUS", "ADD_ASSIGN", "MINUS", "SUB_ASSIGN", "MULT", "MULT_ASSIGN", "EXPONENTIAL",
                     "DIV", "DIV_ASSIGN", "MOD", "MOD_ASSIGN", "GREATER_THAN", "GREATER_THAN_EQUAL",
                     "LESS_THAN", "LESS_THAN_EQUAL", "NOT_EQUAL", "COMPARE_EQUALS", "ASSIGN_EQUALS",
-                    "LPAREN", "LBRACE", "LBRACKET", "START_OF_LINE"]; //these might be followed by a number prefaced by + or -
+                    "LPAREN", "LBRACE", "LBRACKET", "START_OF_LINE", "END_OF_LINE"]; //these might be followed by a number prefaced by + or -
     var mathIndicators = ["NUMBER", "FLOAT", "BINARY", "OCTAL", "HEX"]; //a + or - prefaced by this should be careful
     var numbers = /^[0-9]+$/;
     if(input !== null || input !== ""){
@@ -927,17 +927,26 @@ function getToken(input, updateLastToken){
                 lexeme.length++; //only incremenet the length since spaces are mostly ignored in parsing
                 break;
             case "\n":
-                lexeme.id = "line_break";
+                lexeme.id = "\n";
                 lexeme.type = "END_OF_LINE";
                 lexeme.length++;
                 lexeme.charStart = lexeme.charEnd = currentLineCharIndex;
-                code_line++;
-                currentLineCharIndex = 0;
+                if(updateLastToken){
+                    code_line++;
+                    currentLineCharIndex = 0;
+                }
                 break;
             case "#":
                 lexeme.id = "#";
                 lexeme.type = "HASH_TAG";
                 lexeme.length++;
+                break;
+            case "\t":
+                if(input.charAt(1) === "\t") //only parse next char if it is another tab, otheriwse prepare to return
+                    lexeme = getToken(input.slice(1));
+                lexeme.id = "        ";
+                lexeme.type = "TAB";
+                lexeme.length += 8;
                 break;
             default:
                 if(!(keySymbol.includes(input.charAt(0))) || input.charAt(0) === '+' || input.charAt(0) === '-'){
@@ -1009,11 +1018,4 @@ function getToken(input, updateLastToken){
 
 function ungetToken(input, token){
     return token.id + " " + input;
-}
-
-function incrementCodeLine(){
-    code_line++;
-}
-function decrementCodeLine(){
-    code_line--;
 }
