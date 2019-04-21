@@ -812,9 +812,10 @@ function order_while_loop(passedTokens, input){
     
     var takeBranch = stepThroughRawInstr(instrQueue); //this method returns a boolean used to determine if we stay in the loop
     
-    var inputIndentCode = getIndentCode(input);
-    var indented = inputIndentCode.indented;
+    var inputIndentCode = skip_indented_lines(input);
+    var indented = inputIndentCode.cut_off;
     var inputSlice = inputIndentCode.inputSlice;
+    document.getElementById("outputField").value += "Indented:\n" +indented + "\nReturn:\n" + inputSlice;
     
     //resolve the state of the while loop
     while(takeBranch === "1"){
@@ -2056,81 +2057,216 @@ function resolve_built_ins(opToken, tokenList)
     return res;
 }
 
-function getIndentCode(input){
-    var toReturn = {
-        indented: "",
-        inputSlice: ""
-    };
-    var lexeme, indentAmount, compareLength;
-    var notEndOfFile = true;
-    var isQuoted = false;
-    var isApost = false;
-    var unpairedParen = 0;
-    var unpairedBracket = 0;
-    var unpairedBrace = 0;
-    var lineEnders = ["END_OF_LINE", "END_OF_FILE"]; //all tokens that signal a necessary recompute of indents (even though colon is an end of line, it is followed by \n)
-    input = skipEmptyLines(input); //skip empty lines until first w/ instruction
-    lexeme = getToken(input, false); //we want the first space
-    input = input.slice(lexeme.length); //remove the spaces from input
-    indentAmount = lexeme.length; //current indent stack
-    compareLength = lexeme.length;
-    while(notEndOfFile && compareLength >= indentAmount){ //while the indents are longer or equal to this value so long as not at end of file
-        while(!lineEnders.includes(lexeme.type) && (!isQuoted || !isApost ||
-                unpairedParen !== 0 || unpairedBrace !== 0 || unpairedBracket !== 0)){ //add all the tokesn on this indented line to the indented return value
-            if(lexeme.type === "SPACE")
-                for(var x = 0; x < lexeme.length; x++)
-                    toReturn.indented += lexeme.id; //space length is important
-            else
-                toReturn.indented += lexeme.id; //all other tokens should only be added once
-            switch(lexeme.type){
-                case "QUOTE": isQuoted = !isQuoted;
-                    break;
-                case "APOSTROPHE": isApost = !isApost;
-                    break;
-                case "LPAREN":
-                    if(!isQuoted && !isApost)
-                        unpairedParen++;
-                    break;
-                case "RPAREN":
-                    if(!isQuoted && !isApost)
-                        unpairedParen--;
-                    break;
-                case "LBRACE":
-                    if(!isQuoted && !isApost)
-                        unpairedBrace++;
-                    break;
-                case "RBRACE":
-                    if(!isQuoted && !isApost)
-                        unpairedBrace--;
-                    break;
-                case "LBRACKET":
-                    if(!isQuoted && !isApost)
-                        unpairedBracket++;
-                    break;
-                case "RBRACKET":
-                    if(!isQuoted && !isApost)
-                        unpairedBracket--;
-                    break;
+function skip_indented_lines(input){
+    var inputSlice = input;
+    inputSlice = skipEmptyLines(input);
+    var token = getToken(inputSlice, false);
+    var skip_length = token.length;
+    var current_length = token.length;
+    var cut_off = "";
+    var start_line = token.line_no;
+    
+    while(current_length >= skip_length && token.type !== "END_OF_FILE"){
+        var two_items = skip_one_line(inputSlice);
+        inputSlice = two_items[0];
+        cut_off = cut_off + two_items[1];
+        //document.getElementById("outputField").value += "Portion Cut Off: \n" + cut_off + "\n";
+        //document.getElementById("outputField").value += "Input Left: " + input + "\n\n\n";
+        token = getToken(inputSlice, false);
+        if(token.type === "SPACE"){
+            current_length = token.length;
+            var i;
+            for(i = 0; i < token.length; i++){
+                cut_off = cut_off + " ";
             }
-            lexeme = getToken(input, false); //we want the first space
-            input = input.slice(lexeme.length);
-        } //exiting this inner while means we've seen a line break & need to find next line with an instruction
-        toReturn.indented += lexeme.id;
-        input = skipEmptyLines(input);
-        lexeme = getToken(input, false); //we want the first space
-        if(lexeme.type === "END_OF_FILE")
-            notEndOfFile = false;
-        else if(lexeme.type === "SPACE"){
-            compareLength = lexeme.length;
-            input = input.slice(lexeme.length); //remove the spaces from input
-        }else //not a space, next line has 0 indent
-            compareLength = 0;
-        
+            inputSlice = inputSlice.slice(token.length);
+            token = getToken(inputSlice, false);
+        } else if(token.type === "TAB"){
+            current_length = token.length;
+            inputSlice = inputSlice.slice(1);
+            cut_off = cut_off + token.id;
+            token = getToken(inputSlice, false);
+        }else if(token.type === "END_OF_LINE"){ 
+            //current_length = 0;
+            cut_off = cut_off + token.id;
+        } else {
+            current_length = 0;
+        }
     }
-    toReturn.inputSlice = input; //whatever is left of the input is placed in the second part of return
+    
+    var toReturn = {
+        inputSlice: inputSlice,
+        cut_off: cut_off,
+        start_line: start_line
+    };
     
     return toReturn;
 }
+
+function skip_one_line(input){
+    var token = getToken(input, false);
+    var multiLine = ["LPAREN", "LBRACE", "LBRACKET", "QUOTE", "TAB", "RPAREN", "RBRACE", "RBRACKET", "SPACE"];
+    var lineEnds = ["END_OF_LINE", "END_OF_FILE"];
+    
+    var openParenCount = 0;
+    var openBraceCount = 0;
+    var openBracketCount = 0;
+    
+    var spliced_line = "";
+
+    
+    while(!lineEnds.includes(token.type) || openParenCount !== 0 || openBraceCount !== 0 || openBracketCount !== 0){
+        if(multiLine.includes(token.type)){
+            switch(token.type){
+                case "LPAREN":
+                    openParenCount++;
+                    spliced_line = spliced_line + token.id;
+                    input = input.slice(token.length);
+                    token = getToken(input, false);
+                    break;
+
+                case "LBRACE":
+                    openBraceCount++;
+                    spliced_line = spliced_line + token.id;
+                    input = input.slice(token.length);
+                    token = getToken(input, false);
+                    break;
+
+                case "LBRACKET":
+                    openBracketCount++;
+                    spliced_line = spliced_line + token.id;
+                    input = input.slice(token.length);
+                    token = getToken(input, false);
+                    break;
+
+                case "QUOTE":
+                    // slice off quotes in another function
+                    spliced_line = spliced_line + token.id;
+                    input = input.slice(token.length);
+                    token = getToken(input, false);
+                    var result = skip_quote(input);
+                    input = result[0];
+                    spliced_line = spliced_line + result[1];
+                    document.getElementById("outputField").value +="skip_one_line: " + spliced_line +"\n";
+                    
+                    token = getToken(input, false);
+                    document.getElementById("outputField").value +="skip_one_line: " + token.id +"\n";
+                    break;
+
+                case "TAB":
+                    spliced_line = spliced_line + token.id;
+                    input = input.slice(1);
+                    token = getToken(input, false);
+                    break;
+
+                case "RPAREN":
+                    openParenCount--;
+                    spliced_line = spliced_line + token.id;
+                    input = input.slice(token.length);
+                    token = getToken(input, false);
+                    break;
+
+                case "RBRACE":
+                    openBraceCount--;
+                    spliced_line = spliced_line + token.id;
+                    input = input.slice(token.length);
+                    token = getToken(input, false);
+                    break;
+
+                case "RBRACKET":
+                    openBracketCount--;
+                    spliced_line = spliced_line + token.id;
+                    input = input.slice(token.length);
+                    token = getToken(input, false);
+                    break;
+                    
+                case "SPACE":
+                    var i;
+                    for(i = 0; i < token.length; i++){
+                        spliced_line = spliced_line += " ";
+                    }
+                    input = input.slice(token.length);
+                    token = getToken(input, false);
+                    break; 
+                    
+            } // end switch statement
+        } else {
+            // If not a character that needs to be handled just remove
+            spliced_line = spliced_line + token.id;
+            input = input.slice(token.length);
+            token = getToken(input, false);
+        } // end if
+    } //end while
+    
+    if(token.type !== "END_OF_FILE"){
+        spliced_line = spliced_line + token.id;
+    }
+    input = input.slice(token.length);
+    return [input, spliced_line];
+}
+
+function skip_quote(input){
+    //should have one quote at this point 
+    var token = getToken(input, false);
+    var spliced = token.id;
+    var saved = token.id;
+    document.getElementById("outputField").value += "skip_quote called\n";
+    var match_found = false;
+    
+    if(token.type === "QUOTE"){
+        //second quote
+        input = input.slice(token.length);
+        token = getToken(input, false);
+        document.getElementById("outputField").value += "Two Quotes; Next Token: " + token.type + "\n";
+        if(token.type === "QUOTE"){
+            //third quote -> run until three quotes again
+            saved = saved + token.id;
+            while(!match_found){
+                token = getToken(input, false);
+                if(token.type === "QUOTE"){
+                    //one quote
+                    spliced = spliced + token.id;
+                    input = input.slice(token.length);
+                    token = getToken(input);
+                    if(token.type === "QUOTE"){
+                        spliced = spliced + token.id;
+                        input = input.slice(token.length);
+                        token = getToken(input);
+                        if(token.type === "QUOTE"){
+                            match_found = true;
+                            spliced = spliced + token.id;
+                            input = input.slice(token.length);
+                        } else {
+                            spliced = spliced + token.id;
+                            input = input.slice(token.length);
+                        } // end third quote if
+                    } else {
+                        spliced = spliced + token.id;
+                        input = input.slice(token.length);
+                    } // end second quote if
+                } else {
+                    spliced = spliced + token.id;
+                    input = input.slice(token.length);
+                } // end first quote if
+            }// end while
+        }// end if
+        // if there are only two quotes, nothing needs to be done
+    } else {
+        // only one quote, run until matching quote then return
+        input = input.slice(token.length);
+        token = getToken(input, false);
+        while(token.type !== "QUOTE"){
+            spliced = spliced + token.id;
+            input = input.slice(token.length);
+            token = getToken(input, false);
+        }
+        input = input.slice(token.length);
+        spliced = spliced + token.id;
+    }
+    
+    return [input, spliced];
+}
+
 
 function runtime_error(errorType){ //TODO: flesh out types
     switch(errorType){
