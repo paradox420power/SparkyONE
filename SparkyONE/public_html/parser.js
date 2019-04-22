@@ -27,6 +27,8 @@ function skipSpaces(){
         program = program.slice(token.length);
         //token = getToken(program, false);
         //document.write("Next Token: " + token.id + "<br>");
+    }else if(token.type === "TAB"){
+        program = program.slice(token.length/8);
     }
     //else do nothing
 }
@@ -34,7 +36,7 @@ function skipSpaces(){
 // Checks current token with indent_stack for dedent and unexpected indentation
 function check_indents(){
     var token = getToken(program, false);
-    if(token.type !== "SPACE"){
+    if(token.type !== "SPACE" && token.type !== "TAB"){
         if(indent_stack.length === 1){
             //There has been no new level of indentation
             //do nothing as this should be valid
@@ -60,11 +62,15 @@ function check_indents(){
                 check_indents();
             }else if(token.length === current){
                 //matching indent
-                program = program.slice(token.length);
+                if(token.type === "SPACE"){
+                    program = program.slice(token.length);
+                }else if(token.type === "TAB"){
+                    program = program.slice(token.length/8);
+                }
                 indent_stack.push(current);
             }
         }else{
-            if(token.type === "SPACE"){
+            if(token.type === "SPACE" || token.type === "TAB"){
                 syntax_error("INDENTATION_ERROR");
             }
         }
@@ -73,7 +79,7 @@ function check_indents(){
 
 function increase_indent(){
     var token = getToken(program, false);
-    if(token.type === "SPACE"){
+    if(token.type === "SPACE" || token.type === "TAB"){
         var current = indent_stack.pop();
         if(token.length <= current){
             //TO DO, insert syntax error
@@ -97,18 +103,35 @@ function increase_indent(){
 //used to save potentially useful spaces
 function saveSpaces(){
     var token = getToken(program, false);
-    if(token.type === "SPACE"){
-        return token.length;
+    if(token.type === "SPACE" || token.type === "TAB"){
+        return [token.length, token.type];
     }else{
-        return 0;
+        return [0, "SPACE"];
     }
 }
 
 function returnHeldSpaces(spaces){
-    var allSpaces = "";
-    for(var x = 0; x < spaces; x++)
-        allSpaces += " ";
-    program = allSpaces + program;
+    //document.write("<br>" + spaces + "<br>");
+    if (typeof spaces === 'undefined'){
+        //Occurs in the case of an end_of_file
+        //the program has ended so there is no reason to return the spaces back to the program
+    }else{
+        if(spaces[1] === "SPACE"){
+            var allSpaces = "";
+            for(var x = 0; x < spaces[0]; x++)
+                allSpaces += " ";
+            program = allSpaces + program;
+        }else if(spaces[1] === "TAB"){
+            var allSpaces = "";
+            for(var x = 0; x < spaces[0]/8; x++)
+                allSpaces += "\t";
+            program = allSpaces + program;
+        }else{
+            //TO DO
+            //INSERT SYNTAX ERROR
+            syntax_error("");
+        }
+    }
 }
 
 //reads & returns next token, ignoring spaces
@@ -145,7 +168,6 @@ function expect(tokenType){
         program = program.slice(token.length); //unnecessary to slice since an error is thrown
         error_expected_not_matching(tokenType, token.type, token.line_no);
     }
-    //document.write(program + "<br><br>");
     return token;
 }
 
@@ -156,12 +178,27 @@ function readEmptyLines(){
     if(token.type === "SPACE"){
         program = program.slice(token.length); //slice off the spaces
         token2 = getToken(program, false);
-        if(token2.type === "END_OF_LINE"){ //if next is line break, its ok
+        if(token2.type === "END_OF_LINE" || token2.type === "TAB"){ //if next is line break, its ok
             readEmptyLines();
         }else{ //some keyword was read & the spaces could be indent that need to be read
             if(token.type === "SPACE"){
                 for(i = 0; i < token.length; i++){
                     program = " " + program;
+                }
+                //increase_indent();
+            }else{//TO DO: This never ends up being called...why is it here?
+                program = token.id + "" + program; //add spliced id back to front of program
+            }
+        }
+    }else if(token.type === "TAB"){
+        program = program.slice(token.length/8); //slice off the tab
+        token2 = getToken(program, false);
+        if(token2.type === "END_OF_LINE" || token2.type === "SPACE"){ //if next is line break, its ok
+            readEmptyLines();
+        }else{ //some keyword was read & the spaces could be indent that need to be read
+            if(token.type === "TAB"){
+                for(i = 0; i < token.length/8; i++){
+                    program = "\t" + program;
                 }
                 //increase_indent();
             }else{//TO DO: This never ends up being called...why is it here?
@@ -177,9 +214,13 @@ function readEmptyLines(){
 function parse_begin_program(input){
     program = input;
     indent_stack.push(0);
+    //TO DO
+    //var spaceCount = saveSpaces();
     var token = peek();
-    if(token.type === "END_OF_LINE")
+    if(token.type === "END_OF_LINE"){
         expect("END_OF_LINE"); //this will precede to read all empty lines
+    }
+        
     
     token = peek();
     if(token.type === "IMPORT" || token.type === "FROM"){
@@ -333,7 +374,7 @@ function parse_function_full(){
     parse_function_def();
     var token = getToken(program, false);
     //After the definition of the function there should be an indent for the body of the function
-    if(token.type === "SPACE"){
+    if(token.type === "SPACE" || token.type === "TAB"){
         if(indent_stack[indent_stack.length-1] < token.length){
             increase_indent();
             parse_stmt_list();
@@ -411,26 +452,27 @@ function parse_stmt_list(onSameLine = false){
     if(token.type !== "END_OF_FILE"){//some statements are the end of the program & won't have a line break
         if(token.type === "END_OF_LINE"){
             expect("END_OF_LINE");
-            spaceCount = saveSpaces();
+            spaceCount = saveSpaces();//need to be held on to for indent stack purposes
+            token = peek();
+            returnHeldSpaces(spaceCount);//now that we've peeked the next token we return the spaces
         }else if(token.type === "SEMICOLON"){
             expect("SEMICOLON");
             sameLine = true;
+            spaceCount = saveSpaces();//need to be held on to for indent stack purposes
             token = peek(); //sometimes a semicolon is followed by a line break
             if(token.type === "END_OF_LINE"){
                 expect("END_OF_LINE");
-                spaceCount = saveSpaces();
+                spaceCount = saveSpaces();//need to be held on to for indent stack purposes
                 sameLine = false;
             }
+            token = peek();
+            returnHeldSpaces(spaceCount);//now that we've peeked the next token we return the spaces
         }else{
             //TO DO
             //INSERT SYNTAX ERROR
             syntax_error("");
         }
     }
-    //var stmt_Starts = ["IF", "FOR", "WHILE", "ID", "RETURN", "HASH_TAG"];
-    //spaceCount = saveSpaces(); //need to be held on to for indent stack purposes
-    token = peek();
-    returnHeldSpaces(spaceCount); //now that we've peeked the next token we return the spaces
     
     if(token.type === "END_OF_FILE"){
         //do nothing, and return to parse_program to expect the token
@@ -526,22 +568,49 @@ function parse_else_stmt(){
 }
 
 function parse_conditional(){
-    parse_primary();
     var token = peek();
-    var compare_ops = ["COMPARE_EQUALS", "NOT_EQUAL", "LESS_THAN", "LESS_THAN_EQUAL", "GREATER_THAN", "GREATER_THAN_EQUAL"];
-    if(compare_ops.includes(token.type)){
-        parse_comparison_operator();
-        parse_primary();
+    while(token.type === "NOT"){
+        expect("NOT");
         token = peek();
-        var link_ops = ["AND", "OR"];
-        if(link_ops.includes(token.type)){
+    }
+    parse_expr();
+    token = peek();
+    var compare_ops = ["COMPARE_EQUALS", "NOT_EQUAL", "LESS_THAN", "LESS_THAN_EQUAL", "GREATER_THAN", "GREATER_THAN_EQUAL"];
+    var link_ops = ["AND", "OR"];
+    let moreToCompare = false;
+    if(compare_ops.includes(token.type) || link_ops.includes(token.type))
+        moreToCompare = true;
+    while(moreToCompare){
+        if(compare_ops.includes(token.type)){
+            parse_comparison_operator();
+            token = peek();
+            while(token.type === "NOT"){
+                expect("NOT");
+                token = peek();
+            }
+            parse_expr();
+            token = peek();
+            if(!compare_ops.includes(token.type) && !link_ops.includes(token.type))
+                moreToCompare = false;
+        }else if(link_ops.includes(token.type)){
             parse_comparison_link();
-            parse_conditional();
+            token = peek();
+            while(token.type === "NOT"){
+                expect("NOT");
+                token = peek();
+            }
+            parse_expr();
+            token = peek();
+            if(!compare_ops.includes(token.type) && !link_ops.includes(token.type))
+                moreToCompare = false;
+        }else{
+            syntax_error("INVALID_COND_OPERATOR");
+            moreToCompare = false;
         }
-    }else{
-        syntax_error("INVALID_COND_OPERATOR");
+        token = peek();
     }
 }
+
 
 function parse_comparison_operator(){
     var token = peek();
@@ -1497,7 +1566,7 @@ function named_format(potentialPairs, namedPara){
 function parse_comment(){
     expect("HASH_TAG");
     var token = peek();
-    while(token.type !== "END_OF_LINE"){
+    while(token.type !== "END_OF_LINE" && token.type !== "END_OF_FILE"){
         expect(token.type);
         token = peek();
     }
