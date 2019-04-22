@@ -4,6 +4,7 @@ var libFunctions = ["ABS", "BIN", "BOOL", "CHR", "FLOAT", "HEX", "LEN", "OCT", "
     "INPUT", "PRINT", "CEIL", "FLOOR", "SQRT", "COS", "SIN", "TAN", "PI", "E", "RANDOM", "SEED", "RANDINT"];
 var program = "";
 var indent_stack = [];
+var cust_func_list = [];//Will likely need to be readdressed within future iterations 
 //USED FOR TESTING FUTURE IMPLEMENTATION
 var insideDef = 0;
 //USED FOR TESTING WHETHER OR NOT THE PARSER RESULTED IN A SYNTAX_ERROR
@@ -25,10 +26,18 @@ function skipSpaces(){
     var token = getToken(program, false);
     if(token.type === "SPACE"){
         program = program.slice(token.length);
+        token = getToken(program,false);
+        if(token.type === "TAB"){
+            skipSpaces();
+        }
         //token = getToken(program, false);
         //document.write("Next Token: " + token.id + "<br>");
     }else if(token.type === "TAB"){
         program = program.slice(token.length/8);
+        token = getToken(program,false);
+        if(token.type === "SPACE"){
+            skipSpaces();
+        }
     }
     //else do nothing
 }
@@ -168,6 +177,7 @@ function expect(tokenType){
         program = program.slice(token.length); //unnecessary to slice since an error is thrown
         error_expected_not_matching(tokenType, token.type, token.line_no);
     }
+    //document.write(program + "<br><br>");
     return token;
 }
 
@@ -217,10 +227,8 @@ function parse_begin_program(input){
     //TO DO
     //var spaceCount = saveSpaces();
     var token = peek();
-    if(token.type === "END_OF_LINE"){
+    if(token.type === "END_OF_LINE")
         expect("END_OF_LINE"); //this will precede to read all empty lines
-    }
-        
     
     token = peek();
     if(token.type === "IMPORT" || token.type === "FROM"){
@@ -505,7 +513,35 @@ function parse_stmt(sameLine = false){
                     break;
                 case "WHILE": parse_while_stmt();
                     break;
-                case "ID": parse_assign_stmt();
+                case "ID": 
+                    var tempInput = program;
+                    var token2 = peek_2_ahead();
+                    
+                    if(token2.type === "LBRACE"){//list[0] = ...
+                        expect("ID");
+                        expect("LBRACE");
+                        parse_expr();//Validity should be handled by runtime implementation.
+                        token2 = peek();
+                        if(token2.type === "COLON"){//list[0:2] = ...
+                            expect("COLON");
+                            parse_expr();//Validity should be handled by runtime implementation.
+                        }
+                        expect("RBRACE");
+                        token2 = peek();
+                        program = tempInput;
+                    }
+                    
+                    if(token2.type === "ASSIGN_EQUALS"){
+                        parse_assign_stmt();
+                    }else if(token2.type === "COMMA"){ //a,b,c,d = 1,2,3,4
+                        //TO DO
+                        //Account for tuple assignment
+                        parse_multi_val_assign_stmt();      
+                    }else if(token2.type === "PERIOD"){ //TO DO: function call
+                        
+                    }else{
+                        parse_expr();
+                    }
                     break;
                 case "DEF": parse_function_full();
                     break;
@@ -524,16 +560,17 @@ function parse_stmt(sameLine = false){
                     break;
             }
         }else{//This is for when an expression is used outside of assigning it to a variable
-            if(["PLUS", "MINUS", "INCREMENT", "DECREMENT"].includes(token.type)){
-                expect(token.type);
-                token = peek();
+            while(!["END_OF_LINE", "END_OF_FILE", "SEMICOLON"].includes(token.type)){
                 while(["PLUS", "MINUS", "INCREMENT", "DECREMENT"].includes(token.type)){
                     expect(token.type);
                     token = peek();
                 }
                 parse_expr();
-            }else{
-                parse_expr();
+                token = peek();
+                if(token.type === "COMMA"){
+                    expect("COMMA");
+                    token = peek();
+                }
             }
         }
     }
@@ -610,7 +647,6 @@ function parse_conditional(){
         token = peek();
     }
 }
-
 
 function parse_comparison_operator(){
     var token = peek();
@@ -731,6 +767,19 @@ function parse_assign_stmt(){
     var multi_token = peek(); //used in the case we need to unget the ID, for the multi_val_assign_stmt
     expect("ID");
     var token = peek();
+    
+    if(token.type === "LBRACE"){//list[0] = ...
+        expect("LBRACE");
+        parse_expr();//Validity should be handled by runtime implementation.
+        token = peek();
+        if(token.type === "COLON"){//list[0:2] = ...
+            expect("COLON");
+            parse_expr();//Validity should be handled by runtime implementation.
+        }
+        expect("RBRACE");
+        token = peek();
+    }
+    
     var math_assigns = ["ADD_ASSIGN", "SUB_ASSIGN", "MULT_ASSIGN", "DIV_ASSIGN", "MOD_ASSIGN"];
     if(math_assigns.includes(token.type)){ //calc & assign statements
         parse_assign_op();
@@ -822,13 +871,6 @@ function parse_assign_stmt(){
                     break;
             }
         }
-    }else if(token.type === "COMMA"){ //a,b,c,d = 1,2,3,4
-        //TO DO
-        //Account for tuple assignment
-        program = ungetToken(program, multi_token);
-        parse_multi_val_assign_stmt();      
-    }else if(token.type === "PERIOD"){ //TO DO: function call
-        
     }else if(token.type === "END_OF_LINE" || token.type === "SEMICOLON"){ //end of assign stmt recursion expected
         //do nothing
     }else{
@@ -836,45 +878,84 @@ function parse_assign_stmt(){
     }
 }
 
-//TO DO
-//Consider how to handle this tuple case: t = (1,2,3); a,b,c = t; a,b,c = (1,2,3)
-//Might need to add a case in parse_multi_val_assign_stmt(); to accomdate.
-//That, or find a way to differentiate between the two.
-function parse_multi_val_assign_stmt(){ //a,b,c,d = 1,2,3,4
-    expect("ID");
-    //TO DO cont.
-    //This is most likely a syntax error.
-    //This function will likely need a parameter to count the number of variables being set
-    //and compare that to the number of values being used to set those variables.
-    //Could return a value denoting whether there were not enough, or too many, values received (i.e. positive/negative integer value).
-    //If the value is equal to 0 then we can say that this was a valid assignment.
+/* This function handles a few potential cases.
+ * The two general cases are: 
+ *   1. The occurence of multiiple value assignment statements
+ *      i.   a,b,c,d = 1,2,3,4
+ *      ii.  a,b[0],c = 1,2,3
+ *      iii. a,b[0:2],c = 1, [0,1,2], 1
+ *      iv.  a,b,c, = (1,2,3)
+ *   2. The occurence of tuples not inside of an assignment statement.
+ *      i.   a,
+ *      ii.  a, b, c 
+ *      iii. a + 4, b
+ * Determining the general difference between the two is done by the occurence of an ASSIGN_EQUALS token,
+ * which denotes a multiple value assignment statement, or the occurence of a token that is neither an
+ * ASSIGN_EQUALS token nor a COMMA token, which denotes a possible tuple.
+ * 
+ * It is important to note that the runtime implementation is expected to determine the validity of the
+ * righ hand side assignment. This is why there are no hard checks in the parsing to determine whether 
+ * the same number of elements are on both sides.
+ */
+function parse_multi_val_assign_stmt(){
     var token = peek();
-    if(token.type === "ASSIGN_EQUALS"){
-        expect("ASSIGN_EQUALS");
-        token = peek();
-        var applicable = ["FLOAT","NUMBER","ID", "TRUE", "FALSE", "LPAREN", "LBRACKET", "LBRACE", "APOSTROPHE", "QUOTE"];  
-        if(applicable.includes(token.type)){
-            parse_expr();
-        }else{
-            syntax_error("INVALID_ASSIGNMENT");
-        }
-    }else if(token.type === "COMMA"){
-        expect("COMMA");
-        parse_multi_val_assign_stmt();
-        token = peek();
-        //TO DO cont.
-        //Processing...
-        if(token.type === "COMMA"){
-            expect("COMMA");
-            token = peek();
-            var applicable = ["FLOAT","NUMBER","ID", "TRUE", "FALSE", "LPAREN", "LBRACKET", "LBRACE", "APOSTROPHE", "QUOTE"];
-            if(applicable.includes(token.type)){
-                parse_expr();
-            }else{
-                syntax_error("INVALID_ASSIGNMENT");
+    var possTuple = true;
+    var possAssign = true;
+    
+    //Look for an ending marker that indicates the termination of this statement
+    while(!["END_OF_LINE", "END_OF_FILE", "SEMICOLON"].includes(token.type)){ 
+        if(possAssign && possTuple){//The parsing could still result in a tuple or assignment statement
+            if(token.type === "ID"){
+                var token2 = peek_2_ahead();
+                if(token2.type === "COMMA"){//Matched both patterns
+                    expect("ID");
+                    expect("COMMA");
+                    token = peek();
+                }else if(token2.type === "ASSIGN_EQUALS"){//Matches assignment statement, does not match tuple
+                    expect("ID");
+                    expect("ASSIGN_EQUALS");
+                    possTuple = false;
+                }else if(token2.type === "LBRACE"){//Possibly matches an array element
+                    var tempInput = program;//Used in case we need to call parse_expr()
+                    expect("ID");
+                    expect("LBRACE");
+                    parse_expr();//Validity should be handled by runtime implementation.
+                    token2 = peek();
+                    if(token2.type === "COLON"){//list[0:2]
+                        expect("COLON");
+                        parse_expr();//Validity should be handled by runtime implementation.
+                    }
+                    expect("RBRACE");
+                    
+                    token2 = peek();
+                    if(token2.type === "COMMA"){//Matches both assignment statement and potential tuple
+                        expect("COMMA");
+                        token = peek();
+                    }else if(token2.type === "ASSIGN_EQUALS"){//Matches assignment statement, does not match tuple
+                        expect("ASSIGN_EQUALS");
+                        possTuple = false;
+                    }else{//Otherwise, a different token was received meaning it can't be an Assignment Statement, but could be a tuple
+                        possAssign = false;
+                        program = tempInput;//return to previously unparsed list[] declaration
+                        token = peek();
+                    }
+                }else{//Otherwise, a different token was received meaning it can't be an Assignment Statement, but could be a tuple
+                    possAssign = false;
+                    token = peek();
+                }
+            }else if(token.type === "ASSIGN_EQUALS"){//Used in the case of: a,b,c, = 1,2,3
+                expect("ASSIGN_EQUALS");
+                possTuple = false;
             }
         }else{
-            syntax_error("INVALID_ASSIGNMENT");
+            //Either an ASSIGN_EQUALS was reached, and now the right hand side it being parsed
+            //or an assignment statement is no longer possible and we must parse the remainder of the tuple
+            parse_expr();//validity should be handled by runtime
+            token = peek();
+            if(token.type === "COMMA"){
+                expect("COMMA");
+                token = peek();
+            }
         }
     }
 }
@@ -1146,7 +1227,7 @@ function parse_expr(){
                 //Currently no other functions supported
                 //So throw error
                 syntax_error("NON_FORMAT_ERROR");
-            }//TO DO: double check the below else if statement.
+            }
         }else if(token2.type === "LBRACE"){//list2 = list[0]
             expect("LBRACE");
             parse_expr();//Validity should be handled by runtime implementation.
@@ -1275,7 +1356,7 @@ function parse_expr(){
     }/*else if(token.type === "COMMA"){
         //TO DO
         //COULD HAVE ADVERSE SIDE EFFECTS...
-        //This WILL have adverse side effects due functions using parse_expr() for argument values
+        //This WILL have adverse side effects due to functions using parse_expr() for argument values
         //Adding this would cause multiple arguments to potentially read when they shouldn't be
         //This would not be a useful solution, maybe a reimplementation of parse_multi_val() would
         //assist this endeavor to add tuple functionality outside of assignment statements.
