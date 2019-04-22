@@ -8,6 +8,10 @@ var reservedWords = ["abs", "and", "as", "ascii", "assert", "bin", "bool", "brea
     "continue", "def", "del", "elif", "else", "except", "float", "floor", "finally", "for", "from", "global", "hex",
     "if", "import", "in", "input", "int", "is", "lambda", "len", "max", "min", "my_range", "nonlocal", "not", "oct", "or", "ord", "pass", "print",
     "raise", "randint", "random", "range", "return", "round", "seed", "sin", "str", "sqrt", "tan", "try", "type", "while", "with", "xrange", "yield", "format", "input"];
+var userDefFunc = [];
+var currentScope = "global";
+var scopeStack = ["global"];
+
 
 //this cleans all the arrays & is called by testFile at start of a main call
 function instrMaker_cleanUp(){
@@ -15,6 +19,8 @@ function instrMaker_cleanUp(){
     funcList = [];
     varList = [];
     cmdCount = 1;
+    currentScope = "global";
+    scopeStack = ["global"];
 }
 
 //instruction list operations
@@ -33,7 +39,8 @@ function pushInstr(inst, result, cmd, lineN, nextL){ //INSTR = abs of -1, result
 function pushFunc(fName){
     var Cust_Func = {
         name: fName, //name of function
-        paramType: ["void"], //can be re-decalred later by doing "paramType.length = 0"
+        paramType: new Array(), //can be re-decalred later by doing "paramType.length = 0"
+        scopedCode: "",
         returnType: "void"
     };
     funcList.push(Cust_Func);
@@ -43,18 +50,41 @@ function pushFunc(fName){
 function pushFunc(fName, rType){
     var Cust_Func = {
         name: fName, //name of function
-        paramType: ["void"], //can be re-decalred later by doing "paramType.length = 0"
+        paramType: new Array(), //can be re-decalred later by doing "paramType.length = 0"
+        scopedCode: "",
         returnType: rType
     };
     funcList.push(Cust_Func);
 }
 
-function addParam(fName, param){ //refences function by name & updates its parameter list
+function getFuncIndex(fName){
     var index = -1;
     for(var x = 0; x < funcList.length; x++){
         if(funcList[x].name === fName)
             index = x;
     }
+    return index;
+}
+
+function getFuncIndex(fName, paramCount){
+    var index = -1;
+    for(var x = 0; x < funcList.length; x++){
+        if(funcList[x].name === fName && paramCount === funcList[x].paramType.length)
+            index = x;
+    }
+    return index;
+}
+
+function setScopedCode(index, scopedCode){
+    funcList[index].scopedCode = scopedCode;
+}
+
+function getScopedCode(index){
+    return funcList[index].scopedCode;
+}
+
+function addParam(fIndex, param){ //refences function by name & updates its parameter list
+    var index = fIndex;
     if(index !== -1){
         if(funcList[index].paramType[0] === "void")
             funcList[index].paramType.length = 0; //declaring a none void param should be passed
@@ -69,15 +99,35 @@ function addParamIndex(index, param){ //refences function by name & updates its 
     funcList[index].paramType.push(param);
 }
 
+function getParams(index){
+    return funcList[index].paramType;
+}
+
 //variable list operations
 //check if a vairable name exists for operations
 function varIsDeclared(vName){ //used to decide if a var should be declared or updated
     var index = -1;
+    var highestScope = 0;
     for(var x = 0; x < varList.length; x++){
-        if(varList[x].id === vName)
-            index = x;
+        if(varList[x].id === vName){
+            let currentScopeDepth = scopeStack.indexOf(varList[x].funcScope);
+            if(highestScope <= currentScopeDepth){ //get the highest scope declaration of the variable name
+                index = x;
+                highestScope = currentScopeDepth;
+            }
+        }
     }
     return index;
+}
+
+//after leaving a function call, de-reference the variables declared
+function removeVarOutOfScope(fName){
+    for(var x = 0; x < varList.length; x++){
+        if(fName === varList[x].funcScope){
+            varList.splice(x, 1);
+            x--; //back up so for iterator doesn't skip an index
+        }
+    }
 }
 
 //on new variable create it & push it to the list of variables
@@ -86,7 +136,7 @@ function pushVar(vName, vType, vValue, vFuncScope, vIndentScope){
         id: vName + "",
         type: vType + "",
         value: vValue + "",
-        funcScope: "global",//name of function declared in (will be global, main, or some cust_func
+        funcScope: vFuncScope,//name of function declared in (will be global, main, or some cust_func
         indentScope: vIndentScope //indent count when declared (cannot be referenced from smaller #
         //after decrementing the indent stack, remove any variables with same func scope & larger indent scope
     };
@@ -104,11 +154,15 @@ function getVarType(index){
 
 //push new string to the given index vValue
 function updateVarValue(index, newVal){
-    varList[index].value = newVal;
+    for(var x = 0; x < varList.length; x++)
+        if(varList[x].funcScope === currentScope)
+            varList[index].value = newVal;
 }
 
 function updateVarType(index, newVarType){
-    varList[index].type = newVarType;
+    for(var x = 0; x < varList.length; x++)
+        if(varList[x].funcScope === currentScope)
+            varList[index].type = newVarType;
 }
 
 var lineTokens = new Array(); //honestly, fuck the fact array.push() adds a pointer so updates to that data type are retroactive the array
@@ -147,7 +201,8 @@ function create_instructions(input){
     var lineEnds = ["SEMICOLON", "END_OF_LINE", "END_OF_FILE"];
     var lexeme;
     var priorPathTruth = false; //used to check elif/else branching options
-    while(input.length > 0){
+    var notReturnStatement = true;
+    while(input.length > 0 && notReturnStatement){
         lineTokens = []; //reset array 
         let instr_line = " ";
         lexeme = getToken(input, true);
@@ -183,6 +238,7 @@ function create_instructions(input){
             case "IF": priorPathTruth = false; //new if statement, reset this value
             case "ELIF":
             case "ELSE":
+            case "DEF":
             case "WHILE":
                 openParenCount = 0;
                 while(lexeme.type !== "COLON" || openParenCount !== 0){
@@ -252,14 +308,166 @@ function create_instructions(input){
             case "SPACE":
             case "END_OF_LINE": input = skipEmptyLines(input);
                 break;
-            default: console.log("Error");
-                console.log(lexeme.id + " " + lexeme.type);
-                input = input.slice(1);
+            default: 
+                if(reservedWords.includes(lexeme.id) || userDefFunc.includes(lexeme.id)){
+                    console.log(lexeme.id);
+                    if(lexeme.id === "return")
+                        notReturnStatement = false; //used to avoid executing dead code
+                    openParenCount = 0;
+                    while(!lineEnds.includes(lexeme.type) || openParenCount !== 0){ //a line can be "a = ( 6 + \n 6) a still be treated as a single instruction
+                        lexeme = getToken(input, true);
+                        if(!lineEnds.includes(lexeme.type)){ //don't push a line end token to the list getting resolved, but it will be sliced
+                            instr_line += lexeme.id + " ";
+                            appendTokenList(lexeme);
+                            if(lexeme.type === "LPAREN")
+                                openParenCount++;
+                            if(lexeme.type === "RPAREN")
+                                openParenCount--;
+                        }
+                        input = input.slice(lexeme.length);
+                    }
+                    pushInstr("Instruction" + instr_line, "", cmdCount, lexeme.line_no, 0); //this pushes the line being resolved before actualy step wise resolution
+                    order_assign_statement(lineTokens);
+                    lineTokens = [];
+                }else{
+                    console.log("Error");
+                    console.log(lexeme.id + " " + lexeme.type);
+                    while(!lineEnds.includes(lexeme.type) || lexeme.type === "SEMICOLON"){ //a line can be "a = ( 6 + \n 6) a still be treated as a single instruction
+                        lexeme = getToken(input, true);
+                        input = input.slice(lexeme.length);
+                    }
+                }
                 break;
         }
         cmdCount++;
     }
     return instrList;
+}
+
+/*
+ This will convert the passed tokens into a priority queue of atomic operations. It will then iterate
+through the operations and resolve them 1 at a time, pushing them to the instruction queue that gets returned
+until there is only 1 token left to resolve. This method does not push the instructions, but calls methods that
+push the appropriate syntax for operations. While it's called assign it can also handle standalone ops, like 3+3 or 4 == 5
+ */
+function order_assign_statement(passedTokens){
+    
+    
+    let instrQueue = createInstrQueue(passedTokens);
+        
+    stepThroughRawInstr(instrQueue);
+    
+    instrQueue = []; //for added measure, there should only be 1 token in the queue but it never hurts to empty it at conclusion
+}
+
+function order_while_loop(passedTokens, input){
+    let tokenHolder = new Array();
+    for(var x = 0; x < passedTokens.length; x++){ //christ, why is JavaScript create a pointer to the same object when you do "var arr1 = arr2"
+        let lexeme = {
+            id: passedTokens[x].id,
+            type: passedTokens[x].type,
+            line_no: passedTokens[x].line_no,
+            charStart: passedTokens[x].charStart,
+            charEnd: passedTokens[x].charEnd
+        };
+        tokenHolder.push(lexeme);
+    }
+    let instrQueue = createInstrQueue(tokenHolder);
+    var lineOfInsidence = instrQueue[0].token.line_no;//since the tokens are being dealt with in another method, we need to store the line they occur on
+    
+    var takeBranch = stepThroughRawInstr(instrQueue); //this method returns a boolean used to determine if we stay in the loop
+    
+    var inputIndentCode = skip_indented_lines(input);
+    var indented = inputIndentCode.cut_off;
+    var inputSlice = inputIndentCode.inputSlice;
+    document.getElementById("outputField").value += "Indented:\n" +indented + "\nReturn:\n" + inputSlice;
+    
+    //resolve the state of the while loop
+    while(takeBranch === "1"){
+        pushInstr("The While loop evaluated to True, take the path", "" , cmdCount, lineOfInsidence, 0);
+        create_instructions(indented); //do the indented code
+        tokenHolder = [];
+        for(var x = 0; x < passedTokens.length; x++){ //reset the tokenHolder for another loop
+            let lexeme = {
+                id: passedTokens[x].id,
+                type: passedTokens[x].type,
+                line_no: passedTokens[x].line_no,
+                charStart: passedTokens[x].charStart,
+                charEnd: passedTokens[x].charEnd
+            };
+            tokenHolder.push(lexeme);
+        }
+        instrQueue = createInstrQueue(tokenHolder);
+        takeBranch = stepThroughRawInstr(instrQueue); //re-evaluate the loop condiiton
+    }
+    pushInstr("The While loop evaluated to False, don't take the path", "" , cmdCount, lineOfInsidence, 0);
+    
+    return inputSlice;
+}
+
+function order_if_statement(passedTokens, input, priorPathTruth){
+    let instrQueue = createInstrQueue(passedTokens);
+    var lineOfInsidence = instrQueue[0].token.line_no;//since the tokens are being dealt with in another method, we need to store the line they occur on
+    
+    var takeBranch;
+    var inputIndentCode = skip_indented_lines(input);
+    var indented = inputIndentCode.cut_off;
+    var inputSlice = inputIndentCode.inputSlice;
+    
+    if(!priorPathTruth){ //preceding if/elif are false
+        if(instrQueue[0].token.type === "ELSE"){
+            pushInstr("Else statement reached without branching, take branch", "" , cmdCount, lineOfInsidence, 0);
+            create_instructions(indented);
+            priorPathTruth = true;
+        }else{
+            takeBranch = stepThroughRawInstr(instrQueue); //evaluate the instruction line
+            if(takeBranch === "1"){
+                pushInstr("The statement evaluated to True, take the path", "" , cmdCount, lineOfInsidence, 0);
+                create_instructions(indented);
+                priorPathTruth = true;
+            }else{
+                pushInstr("The statement evaluated to False, don't take the path", "" , cmdCount, lineOfInsidence, 0);
+            }
+        }
+    }else{ //an earlier branch was true, ignore branch options
+        pushInstr("An earlier path was true, we do not evaluate this statement", "" , cmdCount, lineOfInsidence, 0);
+    }
+    
+    let vals = {
+        inputSlice: inputSlice,
+        pathTruth: priorPathTruth
+    };
+    
+    return vals; //return input after the 
+}
+
+function order_cust_function(passedTokens, input){
+    let instrQueue = createInstrQueue(passedTokens);
+    var lineOfInsidence = instrQueue[0].token.line_no;//since the tokens are being dealt with in another method, we need to store the line they occur on
+    
+    var fName = instrQueue[1].token.id;
+    pushFunc(fName);
+    userDefFunc.push(fName);
+    for(var x = 2; x < instrQueue.length; x++){
+        addParam(funcList.length-1, instrQueue[x].token.id);
+    }
+    
+    var inputIndentCode = skip_indented_lines(input);
+    var indented = inputIndentCode.cut_off;
+    var inputSlice = inputIndentCode.inputSlice;
+    
+    setScopedCode(funcList.length-1, indented);
+    pushInstr("User Function \"" + fName + "\"", " was created" , cmdCount, lineOfInsidence, 0);
+    
+    return inputSlice;
+}
+
+function order_print_statement(passedTokens){
+    
+    let instrQueue = createInstrQueue(passedTokens);
+    
+    stepThroughRawInstr(instrQueue);
+    
 }
 
 function createInstrQueue(passedTokens){
@@ -394,6 +602,9 @@ function createInstrQueue(passedTokens){
                     if(reservedWords.includes(passedTokens[x].id)){
                         tempPriority = 9 + priorityMod; //resolve these first
                         printComma = false;
+                    }else if(userDefFunc.includes(passedTokens[x].id) && passedTokens[x+1].id === "("){
+                        tempPriority = 9 + priorityMod; //resolve these first
+                        printComma = false;
                     }else{
                         tempPriority = -1;
                     }
@@ -472,7 +683,7 @@ function stepThroughRawInstr(instrQueue){
     var branchOps = ["WHILE", "IF", "ELIF"];
     var numTypes = ["FLOAT", "NUMBER"];
     if(instrQueue[0].token.type !=="ELSE"){
-        while(instrQueue.length > 1){ //assignments should resolve down to a single vlaue remaining (and it is what was assigned to a variable)
+        while(instrQueue.length > 1 || reservedWords.includes(instrQueue[0].token.id) || userDefFunc.includes(instrQueue[0].token.id)){ //assignments should resolve down to a single vlaue remaining (and it is what was assigned to a variable)
             // get the tokens operated on
             //get the next priority operation
             opIndex = priorityPop(instrQueue);
@@ -704,7 +915,6 @@ function stepThroughRawInstr(instrQueue){
 
             //standard, non-special case resolutions below
             //perform the operation
-            let isPrint = false;
             if(validOp){
                 if(mathOps.includes(currentOp.type)){ //if the next prioritized operation is math, go to resolve Math
                     resolution = resolveMath(val1, currentOp, val2);
@@ -752,17 +962,19 @@ function stepThroughRawInstr(instrQueue){
                     
                 }else if(currentOp.type === "PRINT"){
                     resolution = resolvePrint(instrQueue);
-                    instrQueue = [];
-                    isPrint = true;
+                    prefixLength = 0;
                     
                 }else if(reservedWords.includes(currentOp.id)){//catch 22 of all missed built-in functions
                     resolution = resolve_built_ins(currentOp, val2);
                     prefixLength = 0; //prefix shouldn't actually be accounted for in this resolution
                     
+                }else if(userDefFunc.includes(currentOp.id)){
+                    resolution = resolveUserDefFunc(currentOp, val2);
+                    prefixLength = 0; //prefix shouldn't actually be accounted for in this resolution
+                    
                 }//else if "def"
 
-                if(!isPrint)
-                    resolveQueue(opIndex, instrQueue, resolution, prefixLength, suffixLength); //remove these tokens & replace with ID for the resolution
+                resolveQueue(opIndex, instrQueue, resolution, prefixLength, suffixLength); //remove these tokens & replace with ID for the resolution
             }
 
 
@@ -780,119 +992,6 @@ function stepThroughRawInstr(instrQueue){
     }
     
     return takeBranch;
-}
-
-/*
- This will convert the passed tokens into a priority queue of atomic operations. It will then iterate
-through the operations and resolve them 1 at a time, pushing them to the instruction queue that gets returned
-until there is only 1 token left to resolve. This method does not push the instructions, but calls methods that
-push the appropriate syntax for operations. While it's called assign it can also handle standalone ops, like 3+3 or 4 == 5
- */
-function order_assign_statement(passedTokens){
-    
-    
-    let instrQueue = createInstrQueue(passedTokens);
-        
-    stepThroughRawInstr(instrQueue);
-    
-    instrQueue = []; //for added measure, there should only be 1 token in the queue but it never hurts to empty it at conclusion
-}
-
-function order_while_loop(passedTokens, input){
-    let tokenHolder = new Array();
-    for(var x = 0; x < passedTokens.length; x++){ //christ, why is JavaScript create a pointer to the same object when you do "var arr1 = arr2"
-        let lexeme = {
-            id: passedTokens[x].id,
-            type: passedTokens[x].type,
-            line_no: passedTokens[x].line_no,
-            charStart: passedTokens[x].charStart,
-            charEnd: passedTokens[x].charEnd
-        };
-        tokenHolder.push(lexeme);
-    }
-    let instrQueue = createInstrQueue(tokenHolder);
-    var lineOfInsidence = instrQueue[0].token.line_no;//since the tokens are being dealt with in another method, we need to store the line they occur on
-    
-    var takeBranch = stepThroughRawInstr(instrQueue); //this method returns a boolean used to determine if we stay in the loop
-    
-    var inputIndentCode = skip_indented_lines(input);
-    var indented = inputIndentCode.cut_off;
-    var inputSlice = inputIndentCode.inputSlice;
-    document.getElementById("outputField").value += "Indented:\n" +indented + "\nReturn:\n" + inputSlice;
-    
-    //resolve the state of the while loop
-    while(takeBranch === "1"){
-        pushInstr("The While loop evaluated to True, take the path", "" , cmdCount, lineOfInsidence, 0);
-        create_instructions(indented); //do the indented code
-        tokenHolder = [];
-        for(var x = 0; x < passedTokens.length; x++){ //reset the tokenHolder for another loop
-            let lexeme = {
-                id: passedTokens[x].id,
-                type: passedTokens[x].type,
-                line_no: passedTokens[x].line_no,
-                charStart: passedTokens[x].charStart,
-                charEnd: passedTokens[x].charEnd
-            };
-            tokenHolder.push(lexeme);
-        }
-        instrQueue = createInstrQueue(tokenHolder);
-        takeBranch = stepThroughRawInstr(instrQueue); //re-evaluate the loop condiiton
-    }
-    pushInstr("The While loop evaluated to False, don't take the path", "" , cmdCount, lineOfInsidence, 0);
-    
-    return inputSlice;
-}
-
-function order_if_statement(passedTokens, input, priorPathTruth){
-    let instrQueue = createInstrQueue(passedTokens);
-    var lineOfInsidence = instrQueue[0].token.line_no;//since the tokens are being dealt with in another method, we need to store the line they occur on
-    
-    var takeBranch;
-    var inputIndentCode = skip_indented_lines(input);
-    var indented = inputIndentCode.cut_off;
-    var inputSlice = inputIndentCode.inputSlice;
-    
-    if(!priorPathTruth){ //preceding if/elif are false
-        if(instrQueue[0].token.type === "ELSE"){
-            pushInstr("Else statement reached without branching, take branch", "" , cmdCount, lineOfInsidence, 0);
-            create_instructions(indented);
-            priorPathTruth = true;
-        }else{
-            takeBranch = stepThroughRawInstr(instrQueue); //evaluate the instruction line
-            if(takeBranch === "1"){
-                pushInstr("The statement evaluated to True, take the path", "" , cmdCount, lineOfInsidence, 0);
-                create_instructions(indented);
-                priorPathTruth = true;
-            }else{
-                pushInstr("The statement evaluated to False, don't take the path", "" , cmdCount, lineOfInsidence, 0);
-            }
-        }
-    }else{ //an earlier branch was true, ignore branch options
-        pushInstr("An earlier path was true, we do not evaluate this statement", "" , cmdCount, lineOfInsidence, 0);
-    }
-    
-    let vals = {
-        inputSlice: inputSlice,
-        pathTruth: priorPathTruth
-    };
-    
-    return vals; //return input after the 
-}
-
-function order_cust_Function(passedTokens, input){
-    let instrQueue = createInstrQueue(passedTokens);
-    var lineOfInsidence = instrQueue[0].token.line_no;//since the tokens are being dealt with in another method, we need to store the line they occur on
-    
-    var takeBranch = stepThroughRawInstr(instrQueue); //this method returns a boolean used to determine if we stay in the loop
-    
-}
-
-function order_print_statement(passedTokens){
-    
-    let instrQueue = createInstrQueue(passedTokens);
-    
-    stepThroughRawInstr(instrQueue);
-    
 }
 
 function resolvePrecedingOperators(resolveToken){ //step by step resolution of "++--+#"
@@ -1446,7 +1545,8 @@ function resolveAssign(val1, op, val2){
         index = varIsDeclared(val1[0].id);
         if(index === -1){//new variable
             //pushVar(vName, vType, vValue, vFuncScope, vIndentScope)
-            pushVar(val1[0].id, newVarType, newVal, "global", 0);
+            let scope = currentScope;
+            pushVar(val1[0].id, newVarType, newVal, scope, 0);
         }else{ //update existing variable
             updateVarValue(index, newVal);
             updateVarType(index, newVarType);
@@ -1543,9 +1643,6 @@ function formatString(val1, opToken, val2){
             toResolve = []; //empty the resolve list for next round
         }
     }
-    
-    for(var y = 0; y < forVarList.length; y++)
-        console.log("Format Name " + forVarList[y].forName + " & Value " + forVarList[y].forVal);
     
     //case 1 is only has {}, case 2 is {#}, {varName} or a mix
     var replaceByIndex = "";
@@ -2074,9 +2171,75 @@ function resolve_built_ins(opToken, tokenList)
         case "sin":
             res = resolve_sin(tokenList);
             break;
+        case "return":
+            res = resolveReturnStatement(tokenList);
+            break;
+        default:
+            runtime_error("NO_SUCH_METHOD"); //can't be reached unless the built-in is on the lsit of reserved words but not implemented
+            break;
     }
     
     return res;
+}
+
+function resolveReturnStatement(tokenList){
+    var returnVal = convertTokenToValue(tokenList);
+    
+    pushVar("return", returnVal.type, returnVal.value, currentScope, 0); //as a reserved word, we will always find the exact return looking for since users cant declare another var of that name
+    
+    pushInstr("Function " + currentScope + " ", "will return value " + returnVal.value, cmdCount, 0, 0);
+    
+    var resolution = {
+        result: returnVal.value + "",
+        type: returnVal.type
+    }; 
+    
+    return resolution;
+}
+
+function resolveUserDefFunc(opToken, tokenList){
+    //increement stack
+    currentScope = opToken.id;
+    scopeStack.push(currentScope);
+    
+    //identify the user function called
+    var fIndex = getFuncIndex(currentScope, tokenList.length); //pass length to help with overloaded methods
+    //declare variables defined within scope header
+    if(fIndex !== -1){
+        var paramsToDeclare = getParams(fIndex); //this returns a list of ids
+        for(var x = 0; x < tokenList.length; x++){
+            pushVar(paramsToDeclare[x], tokenList[x].type, tokenList[x].id, currentScope, 0);
+        }
+        pushInstr("Function " + opToken.id + " ", "was called", cmdCount, 0, 0);
+    }else{
+        runtime_error("NO_SUCH_METHOD");
+    }
+    
+    //run the scoped code
+    create_instructions(getScopedCode(fIndex));
+    
+    var returnIndex = varIsDeclared("return");
+    var resolution = {
+        result: "",
+        type: ""
+    };
+    if(returnIndex === -1){ //no return value
+        resolution.result = "None";
+        resolution.type = "STRING";
+    }else{
+        resolution.result = getVarValue(returnIndex) + "";
+        resolution.type = getVarType(returnIndex);
+    }
+    
+    //ascending in scope, remove declared variables
+    removeVarOutOfScope(currentScope);
+    
+    //return in the stack
+    scopeStack.pop();
+    currentScope = scopeStack[scopeStack.length-1];
+    
+    return resolution;
+    
 }
 
 function skip_indented_lines(input){
@@ -2306,6 +2469,10 @@ function runtime_error(errorType){ //TODO: flesh out types
             break;
         case "INVALID_ASSIGNMENT":
             alert("Cannot assign to that value");
+            exit();
+            break;
+        case "NO_SUCH_METHOD":
+            alert("That method either is not declared or called incorrectly");
             exit();
             break;
     }
