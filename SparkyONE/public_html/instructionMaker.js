@@ -2199,12 +2199,9 @@ function resolveReturnStatement(tokenList){
 }
 
 function resolveUserDefFunc(opToken, tokenList){
-    //increement stack
-    currentScope = opToken.id;
-    scopeStack.push(currentScope);
     
     //identify the user function called
-    var fIndex = getFuncIndex(currentScope, tokenList.length); //pass length to help with overloaded methods
+    var fIndex = getFuncIndex(opToken.id, tokenList.length); //pass length to help with overloaded methods
     //declare variables defined within scope header
     var toResolve = new Array();
     if(fIndex !== -1){
@@ -2221,13 +2218,17 @@ function resolveUserDefFunc(opToken, tokenList){
                     break;
             }
             console.log(paramsToDeclare[x] + " Token: " + tokenList[x].type + " " + tokenList[x].id + " resolved: " + resolved.type + " " + resolved.value);
-            pushVar(paramsToDeclare[x], resolved.type, resolved.value, currentScope, 0);
+            pushVar(paramsToDeclare[x], resolved.type, resolved.value, opToken.id, 0);
             toResolve = [];
         }
         pushInstr("Function " + opToken.id + " ", "was called", cmdCount, 0, 0);
     }else{
         runtime_error("NO_SUCH_METHOD");
     }
+    
+    //increement stack
+    currentScope = opToken.id;
+    scopeStack.push(currentScope);
     
     //run the scoped code
     create_instructions(getScopedCode(fIndex));
