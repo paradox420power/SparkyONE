@@ -486,6 +486,7 @@ function createInstrQueue(passedTokens){
             let strToken; //holder if a string token is found
             switch(passedTokens[x].type){//used to assign priority
                 case "PRINT": printComma = true;
+                case "RETURN":
                 case "DEF":
                 case "IF":
                 case "ELIF":
@@ -2205,10 +2206,23 @@ function resolveUserDefFunc(opToken, tokenList){
     //identify the user function called
     var fIndex = getFuncIndex(currentScope, tokenList.length); //pass length to help with overloaded methods
     //declare variables defined within scope header
+    var toResolve = new Array();
     if(fIndex !== -1){
         var paramsToDeclare = getParams(fIndex); //this returns a list of ids
         for(var x = 0; x < tokenList.length; x++){
-            pushVar(paramsToDeclare[x], tokenList[x].type, tokenList[x].id, currentScope, 0);
+            toResolve.push(tokenList[x]);
+            let resolved = convertTokenToValue(toResolve);
+            switch(resolved.type){
+                case "BINARY": resolved.value = "0b" + resolved.value.toString(2);
+                    break;
+                case "OCTAL": resolved.value = "0o" + resolved.value.toString(8);
+                    break;
+                case "HEX": resolved.value = "0x" + resolved.value.toString(16);
+                    break;
+            }
+            console.log(paramsToDeclare[x] + " Token: " + tokenList[x].type + " " + tokenList[x].id + " resolved: " + resolved.type + " " + resolved.value);
+            pushVar(paramsToDeclare[x], resolved.type, resolved.value, currentScope, 0);
+            toResolve = [];
         }
         pushInstr("Function " + opToken.id + " ", "was called", cmdCount, 0, 0);
     }else{
