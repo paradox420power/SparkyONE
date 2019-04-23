@@ -4,7 +4,8 @@ var libFunctions = ["ABS", "BIN", "BOOL", "CHR", "FLOAT", "HEX", "LEN", "OCT", "
     "INPUT", "PRINT", "CEIL", "FLOOR", "SQRT", "COS", "SIN", "TAN", "PI", "E", "RANDOM", "SEED", "RANDINT"];
 var program = "";
 var indent_stack = [];
-var cust_func_list = [];//Will likely need to be readdressed within future iterations 
+var encapsulation_stack = [];
+var cust_func_list = [];//Will likely need to be readdressed within future iterations
 //USED FOR TESTING FUTURE IMPLEMENTATION
 var insideDef = 0;
 //USED FOR TESTING WHETHER OR NOT THE PARSER RESULTED IN A SYNTAX_ERROR
@@ -164,17 +165,37 @@ function peek_2_ahead(){ //necessary for a few location in parser
 
  //reads next token, throws an error if they don't match
  // & splices token from input, ignoring spaces
-function expect(tokenType){
+function expect(tokenType, inString = false){
     skipSpaces();
     var token = getToken(program, true);
     if(token.type === tokenType){
+        if(!inString){
+            if(["LPAREN", "LBRACE", "LBRACKET"].includes(token.type)){
+                encapsulation_stack.push(token.type);
+            }else if(["RPAREN", "RBRACE", "RBRACKET"].includes(token.type)){
+                if(encapsulation_stack[encapsulation_stack.length-1].substring(1) === (token.type).substring(1)){
+                    encapsulation_stack.pop();
+                }else{
+                    //TO DO
+                    //INSERT SYNTAX ERROR
+                    //Occured
+                    syntax_error("");
+                }
+            }
+        }
         program = program.slice(token.length);
-        if(token.type === "END_OF_LINE"){
+        
+        if(encapsulation_stack.length !== 0 && !inString){
             readEmptyLines();
-            //check correct indents (stack issue)
-            //check_indents();
+        }else{
+            if(token.type === "END_OF_LINE"){
+                readEmptyLines();
+                //check correct indents (stack issue)
+                //check_indents();
+            }
         }
         //document.write(token.type + " read at line " + token.line_no + "<br>"); //comment this out when not trouble shooting
+
     }else{
         program = program.slice(token.length); //unnecessary to slice since an error is thrown
         error_expected_not_matching(tokenType, token.type, token.line_no);
@@ -1027,10 +1048,10 @@ function multi_str_comment_check(){
     var isMulti = false;
     
     if(token.type === "QUOTE"){
-        expect("QUOTE");
+        expect("QUOTE", true);
         token = getToken(program, false);
         if(token.type === "QUOTE"){
-            expect("QUOTE");
+            expect("QUOTE", true);
             token = getToken(program, false);
             if(token.type === "QUOTE")
                 isMulti = true;
@@ -1038,10 +1059,10 @@ function multi_str_comment_check(){
         }
         program = "\"" + program;
     }else if(token.type === "APOSTROPHE"){
-        expect("APOSTROPHE");
+        expect("APOSTROPHE", true);
         token = getToken(program, false);
         if(token.type === "APOSTROPHE"){
-            expect("APOSTROPHE");
+            expect("APOSTROPHE", true);
             token = getToken(program, false);
             if(token.type === "APOSTROPHE")
                 isMulti = true;
@@ -1059,11 +1080,11 @@ function parse_string(){
     var lineNum = token.line_no;
     //document.write(token.type + "<br><br>");
     if(token.type === "QUOTE"){
-        expect("QUOTE");
+        expect("QUOTE", true);
         token = peek();
         while(token.type !== "QUOTE" && token.type !== "END_OF_FILE"){
             //document.write(token.type + "<br><br>");
-            expect(token.type);
+            expect(token.type, true);
             token = peek();
         }
         if(token.line_no !== lineNum){//The quotations should be on the same line
@@ -1073,11 +1094,11 @@ function parse_string(){
         }
         expect("QUOTE");
     }else if(token.type === "APOSTROPHE"){
-        expect("APOSTROPHE");
+        expect("APOSTROPHE", true);
         token = peek();
         while(token.type !== "APOSTROPHE"){
             //document.write(token.type + "<br><br>");
-            expect(token.type);
+            expect(token.type, true);
             token = peek();
         }
         if(token.line_no !== lineNum){//The quotations should be on the same line
@@ -1095,21 +1116,21 @@ function parse_multi_str_comment(){
         //There's always a check to affirm that these quotes happened in sequence before this function's call,
         //otherwise the below could cause an error where spaces are skipped. Meaning instead of """ we get "" "
         //which are not equivalent
-        expect("QUOTE");
-        expect("QUOTE");
-        expect("QUOTE");
+        expect("QUOTE", true);
+        expect("QUOTE", true);
+        expect("QUOTE", true);
         token = peek();
         
         while(token.type !== "QUOTE" && token.type !== "END_OF_FILE"){
             //document.write(token.type + "<br><br>");
-            expect(token.type);
+            expect(token.type, true);
             token = peek();
         }
         
-        expect("QUOTE");
+        expect("QUOTE", true);
         token = getToken(program,false);
         if(token.type === "QUOTE"){
-            expect("QUOTE");
+            expect("QUOTE", true);
             token = getToken(program, false);
             if(token.type === "QUOTE"){
                 expect("QUOTE");
@@ -1129,21 +1150,21 @@ function parse_multi_str_comment(){
         //There's always a check to affirm that these apostrophes happened in sequence before this function's call,
         //otherwise the below could cause an error where spaces are skipped. Meaning instead of """ we get "" "
         //which are not equivalent
-        expect("APOSTROPHE");
-        expect("APOSTROPHE");
-        expect("APOSTROPHE");
+        expect("APOSTROPHE", true);
+        expect("APOSTROPHE", true);
+        expect("APOSTROPHE", true);
         token = peek();
         
         while(token.type !== "APOSTROPHE" && token.type !== "END_OF_FILE"){
             //document.write(token.type + "<br><br>");
-            expect(token.type);
+            expect(token.type, true);
             token = peek();
         }
         
-        expect("APOSTROPHE");
+        expect("APOSTROPHE", true);
         token = getToken(program,false);
         if(token.type === "APOSTROPHE"){
-            expect("APOSTROPHE");
+            expect("APOSTROPHE", true);
             token = getToken(program, false);
             if(token.type === "APOSTROPHE"){
                 expect("APOSTROPHE");
@@ -2201,7 +2222,7 @@ function parse_randint_function(){
 }
 
 function syntax_error(errorType){
-    document.write("<br>" + program + "<br>");
+    //document.write("<br>" + program + "<br>");
     if(testingResult){
         testingResult = false;
         program = "";
