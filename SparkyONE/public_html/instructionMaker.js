@@ -1929,6 +1929,7 @@ function resolve_len(token)
     return resolution;   
 }
 
+
 function resolve_oct(token)
 {
     var tokenVal = convertTokenToValue(token).value;
@@ -2021,7 +2022,7 @@ function resolve_ceil(token)
 {
     var tokenVal = convertTokenToValue(token).value;
     var resolution;
-    if (Number.isInteger(tokenVal) /*|| Number.isFloat(tokenVal)*/)
+    if (Number.isInteger(tokenVal) || ((tokenVal % 1) !== 0))
     {
         var newVal = Math.ceil(tokenVal);
         
@@ -2051,9 +2052,9 @@ function resolve_floor(token)
 {
     var tokenVal = convertTokenToValue(token).value;
     
-    if (Number.isInteger(tokenVal) || Number.isFloat(tokenVal))
+    if (Number.isInteger(tokenVal) || ((tokenVal % 1) !== 0))
     {
-        var newVal = Math.ceil(tokenVal);
+        var newVal = Math.floor(tokenVal);
         
         pushInstr("floor(" + token[0].id + ") ", "resolves to " + newVal, cmdCount, 0, 0);
         var resolution = {
