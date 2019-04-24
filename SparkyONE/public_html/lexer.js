@@ -13,17 +13,17 @@ var keySymbol = ["=", "+", "-", "*", "/", "%", "<", ">", ":", ";",
 
 //python's reserved words that a user shouldn't be able to use out of context
 var reservedWord = ["True", "False", "None", "abs", "and", "as", "ascii", "assert", "bin", "bool", "break", "ceil", "chr", "class", "cos", 
-    "continue", "def", "del", "elif", "else", "except", "float", "floor", "finally", "for", "from", "global", "hex",
-    "if", "import", "in", "input", "int", "is", "lambda", "len", "max", "min", "my_range", "nonlocal", "not", "oct", "or", "ord", "pass", "print",
+    "continue", "def", "del", "e", "elif", "else", "except", "float", "floor", "finally", "for", "from", "global", "hex",
+    "if", "import", "in", "input", "int", "is", "lambda", "len", "max", "min", "my_range", "nonlocal", "not", "oct", "or", "ord", "pass", "print", "pi",
     "raise", "randint", "random", "range", "return", "round", "seed", "sin", "str", "sqrt", "tan", "try", "type", "while", "with", "xrange", "yield", "format", "input"];
 
 var code_line = 1;
-var lastTokenType = ""; //used to help differentiate +, ++, & +-+-++3... because python
+var lastTokenType = "START_OF_LINE"; //used to help differentiate +, ++, & +-+-++3... because python
 var currentLineCharIndex = 0; //used for highlighting purposes during visualization
 
 function lexer_cleanUp(){//resets all global fields on new code call
     code_line = 1;
-    lastTokenType = "";
+    lastTokenType = "START_OF_LINE";
     currentLineCharIndex = 0;
 }
 
@@ -711,22 +711,25 @@ function getToken(input, updateLastToken){
     var operators = ["PLUS", "ADD_ASSIGN", "MINUS", "SUB_ASSIGN", "MULT", "MULT_ASSIGN", "EXPONENTIAL",
                     "DIV", "DIV_ASSIGN", "MOD", "MOD_ASSIGN", "GREATER_THAN", "GREATER_THAN_EQUAL",
                     "LESS_THAN", "LESS_THAN_EQUAL", "NOT_EQUAL", "COMPARE_EQUALS", "ASSIGN_EQUALS",
-                    "LPAREN", "LBRACE", "LBRACKET"]; //these might be followed by a number prefaced by + or -
+                    "LPAREN", "LBRACE", "LBRACKET", "START_OF_LINE", "END_OF_LINE"]; //these might be followed by a number prefaced by + or -
     var mathIndicators = ["NUMBER", "FLOAT", "BINARY", "OCTAL", "HEX"]; //a + or - prefaced by this should be careful
     var numbers = /^[0-9]+$/;
     if(input !== null || input !== ""){
         var nextChar = input.charAt(0);
         if(operators.includes(lastTokenType) && (nextChar === '+' || nextChar === '-')){ //in this case we have something lik 3--3 which is special case Number, Minus, Number
-            nextChar = 'x'; //this can be anything that isn't a dedicated case, just so long as it goes to the default
+            let prefixOp = readPrefixOps(input);
+            let tmpInput = input.slice(prefixOp.length);
+            if(isNumeric(tmpInput))
+                nextChar = 'x'; //this can be anything that isn't a dedicated case, just so long as it goes to the default
         }
         switch(nextChar){
             case "+":
                 lexeme.length++;
-                if(input.charAt(1) === "+" && !mathIndicators.includes(lastTokenType)){ //3++ is increment, but 3++3 is not
+                /*if(input.charAt(1) === "+" && !mathIndicators.includes(lastTokenType)){ //3++ is increment, but 3++3 is not
                     lexeme.id = "++";
                     lexeme.type = "INCREMENT";
                     lexeme.length++;
-                }else if(input.charAt(1) === "="){
+                }else*/ if(input.charAt(1) === "="){
                     lexeme.id = "+=";
                     lexeme.type = "ADD_ASSIGN";
                     lexeme.length++;
@@ -737,11 +740,11 @@ function getToken(input, updateLastToken){
                 break;
             case "-":
                 lexeme.length++;
-                if(input.charAt(1) === "-" && !mathIndicators.includes(lastTokenType)){ //3-- is decrement, but 3--3 is not
+                /*if(input.charAt(1) === "-" && !mathIndicators.includes(lastTokenType)){ //3-- is decrement, but 3--3 is not
                     lexeme.id = "--";
                     lexeme.type = "DECREMENT";
                     lexeme.length++;
-                }else if(input.charAt(1) === "="){
+                }else*/ if(input.charAt(1) === "="){
                     lexeme.id = "-=";
                     lexeme.type = "SUB_ASSIGN";
                     lexeme.length++;
@@ -924,17 +927,26 @@ function getToken(input, updateLastToken){
                 lexeme.length++; //only incremenet the length since spaces are mostly ignored in parsing
                 break;
             case "\n":
-                lexeme.id = "line_break";
+                lexeme.id = "\n";
                 lexeme.type = "END_OF_LINE";
                 lexeme.length++;
                 lexeme.charStart = lexeme.charEnd = currentLineCharIndex;
-                code_line++;
-                currentLineCharIndex = 0;
+                if(updateLastToken){
+                    code_line++;
+                    currentLineCharIndex = 0;
+                }
                 break;
             case "#":
                 lexeme.id = "#";
                 lexeme.type = "HASH_TAG";
                 lexeme.length++;
+                break;
+            case "\t":
+                if(input.charAt(1) === "\t") //only parse next char if it is another tab, otheriwse prepare to return
+                    lexeme = getToken(input.slice(1));
+                lexeme.id = "        ";
+                lexeme.type = "TAB";
+                lexeme.length += 8;
                 break;
             default:
                 if(!(keySymbol.includes(input.charAt(0))) || input.charAt(0) === '+' || input.charAt(0) === '-'){
@@ -1006,11 +1018,4 @@ function getToken(input, updateLastToken){
 
 function ungetToken(input, token){
     return token.id + " " + input;
-}
-
-function incrementCodeLine(){
-    code_line++;
-}
-function decrementCodeLine(){
-    code_line--;
 }

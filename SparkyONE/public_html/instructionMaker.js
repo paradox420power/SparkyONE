@@ -1807,7 +1807,6 @@ function resolve_chr(token)
     return resolution;
 }
 
-
 function resolve_float(token)
 {
     var tokenVal = convertTokenToValue(token).value;
@@ -1825,7 +1824,7 @@ function resolve_float(token)
         return resolution;
     }
     
-    else if ((tokenVal % 1) !== 0)
+    else if (Number.isFloat(tokenVal))
     {
         var newVal = tokenVal;
         
@@ -1930,7 +1929,6 @@ function resolve_len(token)
     return resolution;   
 }
 
-
 function resolve_oct(token)
 {
     var tokenVal = convertTokenToValue(token).value;
@@ -2023,7 +2021,7 @@ function resolve_ceil(token)
 {
     var tokenVal = convertTokenToValue(token).value;
     var resolution;
-    if (Number.isInteger(tokenVal) || ((tokenVal % 1) !== 0))
+    if (Number.isInteger(tokenVal) /*|| Number.isFloat(tokenVal)*/)
     {
         var newVal = Math.ceil(tokenVal);
         
@@ -2053,9 +2051,9 @@ function resolve_floor(token)
 {
     var tokenVal = convertTokenToValue(token).value;
     
-    if (Number.isInteger(tokenVal) || ((tokenVal % 1) !== 0))
+    if (Number.isInteger(tokenVal) || Number.isFloat(tokenVal))
     {
-        var newVal = Math.floor(tokenVal);
+        var newVal = Math.ceil(tokenVal);
         
         pushInstr("floor(" + token[0].id + ") ", "resolves to " + newVal, cmdCount, 0, 0);
         var resolution = {
@@ -2284,8 +2282,11 @@ function skip_indented_lines(input){
             token = getToken(inputSlice, false);
         } else if(token.type === "TAB"){
             current_length = token.length;
-            inputSlice = inputSlice.slice(1);
-            cut_off = cut_off + token.id;
+            inputSlice = inputSlice.slice(token.length/8);
+            var i;
+            for(i = 0; i < token.length; i++){
+                cut_off = cut_off + " ";
+            }
             token = getToken(inputSlice, false);
         }else if(token.type === "END_OF_LINE"){ 
             //current_length = 0;
