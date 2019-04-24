@@ -18,7 +18,7 @@ function test(input){
 
 //print parsing error
 function error_expected_not_matching(expected, received, line_no){
-    //document.write("Expected Token: " + expected + "<br>Received Token: " + received + "<br>At line " + line_no + "<br>");
+    document.write("Expected Token: " + expected + "<br>Received Token: " + received + "<br>At line " + line_no + "<br>");
 }
 
 //used to remove unwanted spaces
@@ -107,8 +107,6 @@ function increase_indent(){
     }
 }
 
-//TO DO
-//Consider using saveSpaces as a way to help with the potential danger of peek_2_ahead
 //used to save potentially useful spaces
 function saveSpaces(){
     var token = getToken(program, false);
@@ -197,7 +195,7 @@ function expect(tokenType, inString = false){
 
     }else{
         program = program.slice(token.length); //unnecessary to slice since an error is thrown
-        error_expected_not_matching(tokenType, token.type, token.line_no);
+        //error_expected_not_matching(tokenType, token.type, token.line_no);
     }
     //document.write(program + "<br><br>");
     return token;
@@ -426,7 +424,7 @@ function parse_function_call(){
 }
 
 //TO DO
-//Does not cover nested function declarations
+//Is not meant to cover nested function declarations
 function parse_function_full(){
     parse_function_def();
     var token = getToken(program, false);
@@ -559,14 +557,6 @@ function parse_body(){
     }
 }
 
-/*function parse_new_body(){
-    
-}
-
-function parse_body_no_indent(){
-    
-}*/
-
 function parse_return_stmt(){
     expect("RETURN");
     var token = peek();
@@ -660,10 +650,8 @@ function parse_stmt(sameLine = false){
                     if(token2.type === "ASSIGN_EQUALS"){
                         parse_assign_stmt();
                     }else if(token2.type === "COMMA"){ //a,b,c,d = 1,2,3,4
-                        //TO DO
-                        //Account for tuple assignment
                         parse_multi_val_assign_stmt();      
-                    }else if(token2.type === "PERIOD"){ //TO DO: function call
+                    }else if(token2.type === "PERIOD"){ //TO DO: function call on object
                         
                     }else{
                         parse_expr();
@@ -885,10 +873,6 @@ function parse_while_stmt(){
     parse_stmt_list();
 }
 
-//TO DO
-//Consider how to handle this tuple case: t = (1,2,3); a,b,c = t;
-//Might need to add a case in parse_multi_val_assign_stmt(); to accomdate.
-//That, or find a way to differentiate between the two.
 function parse_assign_stmt(){
     var multi_token = peek(); //used in the case we need to unget the ID, for the multi_val_assign_stmt
     expect("ID");
@@ -920,8 +904,6 @@ function parse_assign_stmt(){
                 parse_assign_stmt();
             }else{ //else an id should be a primary/expression
                 parse_expr();
-                //TO DO
-                //Maybe a while loop to account for commas being used to create a tuple that doesn't utilize paranthesis
                 token = peek();
                 while(token.type === "COMMA"){
                     expect("COMMA");
@@ -938,63 +920,17 @@ function parse_assign_stmt(){
                     token = peek();
                 }
             }
-            //TO DO
-            //Probably get rid of the switch case altogether and just call parse_expr
-            //Obviously excessive for final implementation
-            switch(token.type){
-                case "LPAREN":
-                case "LBRACE":
-                case "NUMBER":
-                case "FLOAT":
-                case "TRUE":
-                case "FALSE":
-                case "APOSTROPHE":
-                case "QUOTE": 
-                case "NONE":
-                case "ABS":
-                case "BIN":
-                case "BOOL":
-                case "CHR":
-                case "FLOAT":
-                case "HEX":
-                case "LEN":
-                case "OCT": 
-                case "ORD":
-                case "STR":
-                case "INT":
-                case "MAX":
-                case "MIN":
-                case "INPUT":
-                case "PRINT":
-                case "MATH":
-                case "CEIL":
-                case "FLOOR":
-                case "SQRT": 
-                case "COS": 
-                case "SIN": 
-                case "TAN": 
-                case "PI": 
-                case "E": 
-                case "RANDOM":
-                case "RANDINT":
-                case "SEED":
+            parse_expr();
+            token = peek();
+            while(token.type === "COMMA"){//Used for potential tuple creation
+                expect("COMMA");
+                var token2 = peek();
+                if(token2.type !== "END_OF_LINE" && token2.type !== "SEMICOLON" && token2.type !== "END_OF_FILE"){
                     parse_expr();
                     token = peek();
-                    while(token.type === "COMMA"){//Used for potential tuple creation
-                        expect("COMMA");
-                        var token2 = peek();
-                        if(token2.type !== "END_OF_LINE" && token2.type !== "SEMICOLON" && token2.type !== "END_OF_FILE"){
-                            parse_expr();
-                            token = peek();
-                        }else{
-                            token = peek();
-                        }
-                    }
-                    break;
-                case "INPUT": parse_input_stmt();
-                    break;
-                default: syntax_error("INVALID_RHS");
-                    break;
+                }else{
+                    token = peek();
+                }
             }
         }
     }else if(token.type === "END_OF_LINE" || token.type === "SEMICOLON"){ //end of assign stmt recursion expected
@@ -1112,12 +1048,18 @@ function parse_assign_op(){
 function parse_primary(){
     var token = peek();
     //document.write("Token: " + token.type + " " + token.id + "<br>")
-    var primaries = ["ID", "NUMBER", "FLOAT", "TRUE", "FALSE", "QUOTE", "APOSTROPHE", "NONE"];
+    var primaries = ["ID", "NUMBER", "BINARY", "OCTAL", "HEX", "FLOAT", "TRUE", "FALSE", "QUOTE", "APOSTROPHE", "NONE"];
     if(primaries.includes(token.type)){
         switch(token.type){
             case "ID": expect("ID");
                 break;
             case "NUMBER": expect("NUMBER");
+                break;
+            case "BINARY": expect("BINARY");
+                break;
+            case "OCTAL": expect("OCTAL");
+                break;
+            case "HEX": expect("HEX");
                 break;
             case "FLOAT": expect("FLOAT");
                 break;
@@ -1286,8 +1228,6 @@ function parse_multi_str_comment(){
     }
 }
 
-//TO DO
-//Create for list declaration 
 function parse_list(){
     var token = peek();
     if(token.type === "LBRACE"){//Start of a list
@@ -1429,17 +1369,15 @@ function parse_dictionary(){
     }
 }
 
-//TO DO
-//Consider String implementation
 function parse_dictionary_content(){
     var token = peek();
-    var valid_types = ["NUMBER", "FLOAT", "ID", "LPAREN", "TRUE", "FALSE", "APOSTROPHE", "QUOTE"];
-    if(valid_types.includes(token.type)){//TO DO: This will have to account for potentially invalid variables/tuples when runtime is incorporated.
+    if(token.type !== "RBRACKET" && token.type !== "END_OF_FILE"){
         parse_expr();
         token = peek();
         if(token.type === "COLON"){
             expect("COLON");
             parse_expr();
+            token = peek();
             if(token.type === "COMMA"){
                 expect("COMMA");
                 parse_dictionary_content();
@@ -1447,19 +1385,9 @@ function parse_dictionary_content(){
         }else{
             syntax_error("");//INSERT SYNTAX ERROR
         }
-    }else{
-        syntax_error("");//INSERT SYNTAX ERROR
     }
 }
 
-//TO DO
-function parse_set(){
-    
-}
-
-//TO DO
-//Address how to incorporate function calls on Strings.
-//Consider future implementations of calling functions on other objects, consider slight redesign.
 function parse_expr(){
     var token = peek();
     if(token.type === "ID"){
@@ -1540,7 +1468,12 @@ function parse_expr(){
                     parse_primary();
                 }
                 break;
-            case "HEX": parse_hex_function();
+            case "HEX": 
+                if(token.id === "hex"){
+                    parse_hex_function();
+                }else{
+                    parse_primary();
+                }
                 break;
             case "LEN": parse_len_function();
                 break;
@@ -1608,15 +1541,7 @@ function parse_expr(){
     }else if(compare_ops.includes(token.type)){
         parse_comparison_operator();
         parse_expr();
-    }/*else if(token.type === "COMMA"){
-        //TO DO
-        //COULD HAVE ADVERSE SIDE EFFECTS...
-        //This WILL have adverse side effects due to functions using parse_expr() for argument values
-        //Adding this would cause multiple arguments to potentially read when they shouldn't be
-        //This would not be a useful solution, maybe a reimplementation of parse_multi_val() would
-        //assist this endeavor to add tuple functionality outside of assignment statements.
-        expect()
-    }*///else do nothing
+    }//else do nothing
 }
 
 function parse_op(){
@@ -1913,8 +1838,6 @@ function parse_comment(){
 }
 
 //Built-in Functions
-//TO DO
-//Will we have to worry about the typing of functions, modules, etc. ?
 function parse_input_stmt(){
     expect("INPUT");
     expect("LPAREN");
@@ -1927,43 +1850,26 @@ function parse_input_stmt(){
     }
 }
 
-//TO DO
-//Account for the inclusion of functions in the list of possible tokens read
 function parse_print_stmt(){
     expect("PRINT");
     expect("LPAREN");
     var token = peek();
-    switch(token.type){
-        case "RPAREN": expect("RPAREN");
-            break;
-        case "ID":
-        case "NUMBER":
-        case "FLOAT":
-        case "TRUE":
-        case "FALSE":
-        case "LPAREN":
-        case "LBRACKET": 
-        case "LBRACE": 
-        case "APOSTROPHE": 
-        case "QUOTE":
-            parse_print_multi_val();
-            token = peek();
-            if(token.type === "RPAREN"){//TO DO: Can reduce this to just use expect("RPAREN"), instead of this if statement
-                expect("RPAREN");
-            }else{
-                syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
-            }
-            break;
+    if(token.type === "RPAREN"){
+        expect("RPAREN");
+    }else{
+        parse_print_multi_val();
+        token = peek();
+        if(token.type === "RPAREN"){
+            expect("RPAREN");
+        }else{
+            syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
+        }
     }
 }
 
-//TO DO
-//Need to address implementation for String type eventually.
-//Currently this will account for every way to print with single input, or multiple inputs for the print function
 function parse_print_multi_val(){
     var token = peek();
-    var valid_types = ["ID", "NUMBER", "FLOAT", "TRUE", "FALSE", "LPAREN", "LBRACKET", "LBRACE", "APOSTROPHE", "QUOTE"];
-    if(valid_types.includes(token.type)){
+    if(token.type !== "RPAREN" && token.type !== "END_OF_FILE"){
         parse_expr();
         var token = peek();
         if(token.type === "COMMA"){
