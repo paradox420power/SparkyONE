@@ -5,7 +5,6 @@ var libFunctions = ["ABS", "BIN", "BOOL", "CHR", "FLOAT", "HEX", "LEN", "OCT", "
 var program = "";
 var indent_stack = [];
 var encapsulation_stack = [];
-var cust_func_list = [];//Will likely need to be readdressed within future iterations
 //USED FOR TESTING FUTURE IMPLEMENTATION
 var insideDef = 0;
 //USED FOR TESTING WHETHER OR NOT THE PARSER RESULTED IN A SYNTAX_ERROR
@@ -399,6 +398,33 @@ function parse_program(){
     }
 }
 
+function parse_function_call(){
+    expect("ID");
+    expect("LPAREN");
+    var token = peek();
+    while(token.type !== "RPAREN" && token.type !== "END_OF_FILE"){
+        if(token.type === "ID"){
+            var token2 = peek_2_ahead();
+            if(token2.type === "ASSIGN_EQUALS"){
+                expect("ID");
+                expect("ASSIGN_EQUALS");
+                parse_expr();
+            }else{
+                parse_expr();
+            }
+            token = peek();
+        }else{
+            parse_expr();
+            token = peek();
+            if(token.type === "COMMA"){
+                expect("COMMA");
+                token = peek();
+            }
+        }
+    }
+    expect("RPAREN");
+}
+
 //TO DO
 //Does not cover nested function declarations
 function parse_function_full(){
@@ -421,25 +447,102 @@ function parse_function_full(){
 
 function parse_function_def(){
     expect("DEF");
-    expect("ID"); //should this ID then be added to reservedWords?
-    expect("LPAREN");
     var token = peek();
-    if(token.type !== "RPAREN"){
-        parse_parameter_list();
+    if(token.type === "ID"){
+        expect("ID");
+        expect("LPAREN");
+        var token = peek();
+
+        if(token.type !== "RPAREN"){
+            parse_parameter_list();
+        }
+        
+        expect("RPAREN");
+        expect("COLON");
+        expect("END_OF_LINE");
+    }else{
+        if(libFunctions.includes(token.type)){
+            //TO DO
+            //INSERT SYNTAX ERROR
+            //We don't allow shadowing of library functions at this time.
+            syntax_error("");
+        }else{
+            //TO DO
+            //Expected a variable name/ID token
+            syntax_error("");
+        }
     }
-    expect("RPAREN");
-    expect("COLON");
-    expect("END_OF_LINE");
 }
 
 function parse_parameter_list(){
-    expect("ID");
     var token = peek();
-    if(token.type === "COMMA"){
-        expect("COMMA");
-        token = peek();
-        if(token.type !== "RPAREN"){
-            parse_parameter_list();
+    var paraList = [];
+    var optParaOccurred = false;
+    
+    while(token.type !== "RPAREN" && token.type !== "END_OF_FILE"){
+        
+        if(token.type === "ID" && !paraList.includes(token.id)){
+            paraList.push(token.id);
+            
+            if(!optParaOccurred){
+                var token2 = peek_2_ahead();
+                
+                if(token2.type === "COMMA"){ //required parameter argument, with potentially more arguments to come
+                    expect("ID");
+                    expect("COMMA");
+                    token = peek();
+                }else if(token2.type === "ASSIGN_EQUALS"){ //optional parameter argument
+                    expect("ID");
+                    expect("ASSIGN_EQUALS");
+                    parse_expr();
+                    optParaOccurred = true;
+                    token = peek();
+                    if(token.type === "COMMA"){//potentially more arguments to come
+                        expect("COMMA");
+                        token = peek();
+                    }
+                }else if(token2.type === "RPAREN"){//required parameter argument, with none left to follow
+                    expect("ID");
+                    token = peek();
+                }else{
+                    //TO DO
+                    //INSERT SYNTAX ERROR
+                    //unexpected character
+                    syntax_error("");
+                }
+            }else if(optParaOccurred){//All remaining arguments must follow they syntax of an optional parameter
+                var token2 = peek_2_ahead();
+                
+                if(token2.type === "ASSIGN_EQUALS"){//optional
+                    expect("ID");
+                    expect("ASSIGN_EQUALS");
+                    parse_expr();
+                    optParaOccurred = true;
+                    token = peek();
+                    if(token.type === "COMMA"){
+                        expect("COMMA");
+                        token = peek();
+                    }
+                }else{
+                    //TO DO
+                    //INSERT SYNTAX ERROR
+                    //unexpected character
+                    syntax_error("");
+                }
+            }
+        }else{
+            if(paraList.includes(token.id)){
+                //TO DO
+                //INSERT SYNTAX ERROR
+                //SyntaxError: duplicate argument 'parameter' in function definition
+                syntax_error("");
+            }else{
+                //TO DO
+                //INSERT SYNTAX ERROR
+                //Expected an ID
+                syntax_error("");
+            }
+            token = peek()
         }
     }
 }
@@ -467,7 +570,7 @@ function parse_body_no_indent(){
 function parse_return_stmt(){
     expect("RETURN");
     var token = peek();
-    if(token.type === "END_OF_LINE" || token.type === "SEMICOLON" || "END_OF_FILE"){
+    if(["END_OF_LINE","SEMICOLON", "END_OF_FILE"].includes(token.type)){
         //do nothing, return to parse_body which will cover the expectation of one these tokens
     }else{
         parse_expr();
@@ -1381,6 +1484,9 @@ function parse_expr(){
                 parse_expr();//Validity should be handled by runtime implementation.
             }
             expect("RBRACE");
+        }else if(token2.type === "LPAREN"){//functionCall()
+            program = ungetToken(program, token);
+            parse_function_call();
         }
         //otherwise just parse the ID primary and continue parsing potential expression
     }else if(token.type === "APOSTROPHE" || token.type === "QUOTE"){
