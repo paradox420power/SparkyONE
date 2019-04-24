@@ -357,7 +357,7 @@ function parse_import_stmt(){
                 if(libContents[token.type].includes(token2.type)){
                     expect(token2.type);
                     token2 = peek();
-                    while(token2.type !== "RPAREN"){
+                    while(token2.type !== "RPAREN" && token2.type === "END_OF_FILE"){
                         expect("COMMA");
                         token2 = peek();
                         if(libContents[token.type].includes(token2.type)){
@@ -1145,7 +1145,7 @@ function parse_string(){
     }else if(token.type === "APOSTROPHE"){
         expect("APOSTROPHE", true);
         token = peek();
-        while(token.type !== "APOSTROPHE"){
+        while(token.type !== "APOSTROPHE" && token.type !== "END_OF_FILE"){
             //document.write(token.type + "<br><br>");
             expect(token.type, true);
             token = peek();
@@ -1611,7 +1611,7 @@ function parse_format_function(){
         if(token.type === "RPAREN"){
             expect("RPAREN");
         }else{
-            while(token.type !== "RPAREN"){
+            while(token.type !== "RPAREN" && token.type !== "END_OF_FILE"){
                 token = peek();
                 token2 = peek_2_ahead();
                 if(!nameFmtUsed){//named parameters have not occured yet, meaning primaries and expressions can be used as well
