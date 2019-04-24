@@ -1807,6 +1807,7 @@ function resolve_chr(token)
     return resolution;
 }
 
+
 function resolve_float(token)
 {
     var tokenVal = convertTokenToValue(token).value;
@@ -1824,7 +1825,7 @@ function resolve_float(token)
         return resolution;
     }
     
-    else if (Number.isFloat(tokenVal))
+    else if ((tokenVal % 1) !== 0)
     {
         var newVal = tokenVal;
         
