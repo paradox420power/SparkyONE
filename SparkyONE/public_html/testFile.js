@@ -36,6 +36,6 @@ function main(){
     for(var x = 0; x < instrList.length; x++){
         output += ((x+1) + ") " + instrList[x].instr + " " + instrList[x].result + "\n");
     }
-    
+  
     document.getElementById("outputField").value = output;
 }

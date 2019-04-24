@@ -1,10 +1,9 @@
-
 var instrList = new Array(); //global list of instructions
 var funcList = new Array(); //list of callable functions
 var varList = new Array(); //list of declared variables
 var cmdCount = 1; //this is the instruction on, (instr); or (instr)\n should increment this value
 
-var reservedWords = ["abs", "and", "as", "ascii", "assert", "bin", "bool", "break", "ceil", "chr", "class", "cos", 
+var reservedWords = ["pi","e","abs", "and", "as", "ascii", "assert", "bin", "bool", "break", "ceil", "chr", "class", "cos", 
     "continue", "def", "del", "elif", "else", "except", "float", "floor", "finally", "for", "from", "global", "hex",
     "if", "import", "in", "input", "int", "is", "lambda", "len", "max", "min", "my_range", "nonlocal", "not", "oct", "or", "ord", "pass", "print",
     "raise", "randint", "random", "range", "return", "round", "seed", "sin", "str", "sqrt", "tan", "try", "type", "while", "with", "xrange", "yield", "format", "input"];
@@ -486,7 +485,6 @@ function createInstrQueue(passedTokens){
             let strToken; //holder if a string token is found
             switch(passedTokens[x].type){//used to assign priority
                 case "PRINT": printComma = true;
-                case "RETURN":
                 case "DEF":
                 case "IF":
                 case "ELIF":
@@ -1807,7 +1805,6 @@ function resolve_chr(token)
     return resolution;
 }
 
-
 function resolve_float(token)
 {
     var tokenVal = convertTokenToValue(token).value;
@@ -1929,7 +1926,6 @@ function resolve_len(token)
         
     return resolution;   
 }
-
 
 function resolve_oct(token)
 {
@@ -2121,6 +2117,110 @@ function resolve_sin(token)
     return resolution;   
 }
 
+
+
+function resolve_tan(token)
+{
+    var tokenVal = convertTokenToValue(token).value;
+    
+    var newVal = Math.tan(tokenVal);
+    
+    var resolution = {
+        result: newVal + "",
+        type: "FLOAT"
+    };    
+    
+    pushInstr("tan(" + token[0].id + ") ", "resolves to " +newVal, cmdCount, 0, 0);
+    return resolution;   
+}
+
+function resolve_pi(token)
+{
+    var newVal = Math.PI;
+    var resolution = {
+            result: newVal + "",
+            type: "FLOAT"
+        };
+        pushInstr("_pi_", "resolves to " +newVal, cmdCount, 0, 0);
+        return resolution;
+}
+
+function resolve_e(token)
+{
+    var newVal = Math.E;
+    var resolution = {
+            result: newVal + "",
+            type: "FLOAT"
+        };
+        pushInstr("_e_", "resolves to " +newVal, cmdCount, 0, 0);
+        return resolution;
+}
+
+
+
+function resolve_random(token)
+{
+    var newVal = Math.random();
+    var resolution = {
+            result: newVal + "",
+            type: "FLOAT"
+        };
+    pushInstr("random", "resolves to " +newVal, cmdCount, 0, 0);
+    return resolution;  
+}
+
+function additional_import(token)
+{
+    pushInstr("import(" + token[0].id + ") ", "resolves to " +newVal, cmdCount, 0, 0);
+}
+
+
+function resolve_round(token)
+{   
+    var tokenVal = convertTokenToValue(token).value;
+    var newVal = Math.round(tokenVal);
+    var resolution = {
+            result: newVal + "",
+            type: "INT"
+        };
+   pushInstr("round(" + token[0].id + ") ", "resolves to " +newVal, cmdCount, 0, 0);
+    return resolution; 
+}
+
+function resolve_int(token)
+{
+    var tokenVal = convertTokenToValue(token).value;
+
+
+         var newVal = parseInt(tokenVal);
+        
+        var resolution = {
+            result: newVal + "",
+            type: "INT"
+        };
+        pushInstr("int(" + token[0].id + ") ", "resolves to " + newVal + "", cmdCount, 0, 0);
+        
+        return resolution;
+    }
+
+function resolve_randint(token)
+{
+
+    min = convertTokenToValue(token).value;
+    max = convertTokenToValue(token).value;
+    newVal= Math.random() * (max - min) + min;
+
+
+    var resolution = {
+            result: newVal + "",
+            type: "INT"
+        };
+   pushInstr("randint(" + token[0].id + ") ", "resolves to " +newVal, cmdCount, 0, 0);
+    return resolution; 
+}
+
+
+
 function resolve_built_ins(opToken, tokenList)
 {
     var res;
@@ -2174,9 +2274,52 @@ function resolve_built_ins(opToken, tokenList)
         case "sin":
             res = resolve_sin(tokenList);
             break;
+
+        case "tan":
+            res = resolve_tan(tokenList);
+            break;
+        case "pi":
+            res = resolve_pi(tokenList);
+            break;
+        case "e":
+            res = resolve_e(tokenList);
+            break;
+
+        case "random":
+            res = resolve_random(tokenList);
+            break;
+
+        case "additional-import":
+            res = additional_import(tokenList);
+            break;
+
+        case "int":
+            res = resolve_int(tokenList);
+            break;
+        case "key":
+            res = resolve_key(tokenList);
+            break;
+        case "max":
+            res = resolve_max(tokenList);
+            break;
+        case "min":
+            res = resolve_min(tokenList);
+            break;
+        case "round":
+            res = resolve_round(tokenList);
+            break;
+        case "seed":
+            res = resolve_seed(tokenList);
+            break;
+        case "randint":
+            res = resolve_randint(tokenList);
+            break;
+
+
         case "return":
             res = resolveReturnStatement(tokenList);
             break;
+
         default:
             runtime_error("NO_SUCH_METHOD"); //can't be reached unless the built-in is on the lsit of reserved words but not implemented
             break;
@@ -2201,35 +2344,22 @@ function resolveReturnStatement(tokenList){
 }
 
 function resolveUserDefFunc(opToken, tokenList){
+    //increement stack
+    currentScope = opToken.id;
+    scopeStack.push(currentScope);
     
     //identify the user function called
-    var fIndex = getFuncIndex(opToken.id, tokenList.length); //pass length to help with overloaded methods
+    var fIndex = getFuncIndex(currentScope, tokenList.length); //pass length to help with overloaded methods
     //declare variables defined within scope header
-    var toResolve = new Array();
     if(fIndex !== -1){
         var paramsToDeclare = getParams(fIndex); //this returns a list of ids
         for(var x = 0; x < tokenList.length; x++){
-            toResolve.push(tokenList[x]);
-            let resolved = convertTokenToValue(toResolve);
-            switch(resolved.type){
-                case "BINARY": resolved.value = "0b" + resolved.value.toString(2);
-                    break;
-                case "OCTAL": resolved.value = "0o" + resolved.value.toString(8);
-                    break;
-                case "HEX": resolved.value = "0x" + resolved.value.toString(16);
-                    break;
-            }
-            pushVar(paramsToDeclare[x], resolved.type, resolved.value, opToken.id, 0);
-            toResolve = [];
+            pushVar(paramsToDeclare[x], tokenList[x].type, tokenList[x].id, currentScope, 0);
         }
         pushInstr("Function " + opToken.id + " ", "was called", cmdCount, 0, 0);
     }else{
         runtime_error("NO_SUCH_METHOD");
     }
-    
-    //increement stack
-    currentScope = opToken.id;
-    scopeStack.push(currentScope);
     
     //run the scoped code
     create_instructions(getScopedCode(fIndex));
