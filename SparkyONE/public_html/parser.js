@@ -653,7 +653,7 @@ function parse_stmt(sameLine = false){
                         program = tempInput;
                     }
                     
-                    if(token2.type === "ASSIGN_EQUALS"){
+                    if(["ASSIGN_EQUALS","ADD_ASSIGN", "SUB_ASSIGN", "MULT_ASSIGN", "DIV_ASSIGN", "MOD_ASSIGN"].includes(token2.type)){
                         parse_assign_stmt();
                     }else if(token2.type === "COMMA"){ //a,b,c,d = 1,2,3,4
                         parse_multi_val_assign_stmt();      
@@ -726,6 +726,10 @@ function parse_conditional(){
     var token = peek();
     while(token.type === "NOT"){
         expect("NOT");
+        token = peek();
+    }
+    while(["PLUS", "MINUS", "INCREMENT", "DECREMENT"].includes(token.type)){
+        expect(token.type);
         token = peek();
     }
     parse_expr();
@@ -1520,7 +1524,8 @@ function parse_expr(){
             case "SEED": parse_seed_function();
                 break;
             //INSERT SYNTAX ERROR
-            default: syntax_error("");
+            default: 
+                syntax_error("");
                 break;
         }
     }else{
@@ -1874,6 +1879,7 @@ function parse_print_stmt(){
 function parse_print_multi_val(){
     var token = peek();
     if(token.type !== "RPAREN" && token.type !== "END_OF_FILE"){
+        
         parse_expr();
         var token = peek();
         if(token.type === "COMMA"){
@@ -2238,7 +2244,7 @@ function parse_randint_function(){
 }
 
 function syntax_error(errorType){
-    //document.write("<br>" + program + "<br>");
+    document.write("<br>" + program + "<br>");
     if(testingResult){
         testingResult = false;
         program = "";
