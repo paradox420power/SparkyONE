@@ -5,8 +5,6 @@ var libFunctions = ["ABS", "BIN", "BOOL", "CHR", "FLOAT", "HEX", "LEN", "OCT", "
 var program = "";
 var indent_stack = [];
 var encapsulation_stack = [];
-//USED FOR TESTING FUTURE IMPLEMENTATION
-var insideDef = 0;
 //USED FOR TESTING WHETHER OR NOT THE PARSER RESULTED IN A SYNTAX_ERROR
 var testingResult = true;
 var errorResult = "";
@@ -45,6 +43,7 @@ function skipSpaces(){
 // Checks current token with indent_stack for dedent and unexpected indentation
 function check_indents(){
     var token = getToken(program, false);
+
     if(token.type !== "SPACE" && token.type !== "TAB"){
         if(indent_stack.length === 1){
             //There has been no new level of indentation
@@ -57,19 +56,20 @@ function check_indents(){
         }
     }else{
         if(indent_stack.length !== 1){
+            
             var current = indent_stack.pop();
-            if(token.length > current){
+            if(token.length > current[1]){
                 //unexpected indent
                 indent_stack = [];
-                indent_stack.push(0);
+                indent_stack.push([0,0]);
                 //document.write("index syntax error at line " + token.line_no + "<br>Current: " + current + " TabLength: " + token.length + "<br>");
                 syntax_error("INDENTATION_ERROR");
-            }else if(token.length < current){
+            }else if(token.length < current[1]){
                 //possible dedent
                 //document.write("Popping: " + current + "<br>");
                 //document.write(indent_stack.toString() + "<br>");
                 check_indents();
-            }else if(token.length === current){
+            }else if(token.length === current[1]){
                 //matching indent
                 if(token.type === "SPACE"){
                     program = program.slice(token.length);
@@ -86,7 +86,7 @@ function check_indents(){
     }
 }
 
-function increase_indent(){
+function increase_indent(isDef = false){
     var token = getToken(program, false);
     if(token.type === "SPACE" || token.type === "TAB"){
         var current = indent_stack.pop();
@@ -97,7 +97,11 @@ function increase_indent(){
             //indent_stack.push(current);
         }else{
             indent_stack.push(current);
-            indent_stack.push(token.length);
+            if(isDef){
+                indent_stack.push([current[0]+1, token.length]);
+            }else{
+                indent_stack.push([current[0], token.length]);
+            }
             //document.write("Token: " + token.type + " adding " + token.length + " to stack at line " + token.line_no + "<br>");
         }
     }else{
@@ -243,7 +247,7 @@ function readEmptyLines(){
 
 function parse_begin_program(input){
     program = input;
-    indent_stack.push(0);
+    indent_stack.push([0,0]);
     //TO DO
     //var spaceCount = saveSpaces();
     var token = peek();
@@ -400,18 +404,37 @@ function parse_function_call(){
     expect("ID");
     expect("LPAREN");
     var token = peek();
+    var optionalOnly = false;
     while(token.type !== "RPAREN" && token.type !== "END_OF_FILE"){
-        if(token.type === "ID"){
-            var token2 = peek_2_ahead();
-            if(token2.type === "ASSIGN_EQUALS"){
-                expect("ID");
-                expect("ASSIGN_EQUALS");
-                parse_expr();
+        
+        if(!optionalOnly){
+            if(token.type === "ID"){
+                var token2 = peek_2_ahead();
+
+                if(token2.type === "ASSIGN_EQUALS"){
+                    expect("ID");
+                    expect("ASSIGN_EQUALS");
+                    parse_expr();
+                    optionalOnly = true;
+                }else{
+                    parse_expr();
+                }
+                token = peek();
+                if(token.type === "COMMA"){
+                    expect("COMMA");
+                    token = peek();
+                }
             }else{
                 parse_expr();
+                token = peek();
+                if(token.type === "COMMA"){
+                    expect("COMMA");
+                    token = peek();
+                }
             }
-            token = peek();
         }else{
+            expect("ID");
+            expect("ASSIGN_EQUALS");
             parse_expr();
             token = peek();
             if(token.type === "COMMA"){
@@ -430,13 +453,8 @@ function parse_function_full(){
     var token = getToken(program, false);
     //After the definition of the function there should be an indent for the body of the function
     if(token.type === "SPACE" || token.type === "TAB"){
-        if(indent_stack[indent_stack.length-1] < token.length){
-            increase_indent();
-            parse_stmt_list();
-        }else{
-            //INSERT SYNTAX ERROR, actually an indentation error
-            syntax_error("");
-        }
+        increase_indent(true);
+        parse_stmt_list();
     }else{
         syntax_error("");
     }
@@ -540,20 +558,8 @@ function parse_parameter_list(){
                 //Expected an ID
                 syntax_error("");
             }
-            token = peek()
+            token = peek();
         }
-    }
-}
-
-function parse_body(){
-    //TO DO
-    //Just make into stmt_list?
-    //When the first RETURN is received go back to function full 
-    //Read the return_stmt
-    //continue reading until a dedent is noticed as syntax apparently doesn't matter after that if it's in the same scope...
-    var token = peek();
-    if(token.type === "RETURN"){
-        parse_return_stmt();
     }
 }
 
@@ -600,7 +606,7 @@ function parse_stmt_list(onSameLine = false){
     
     if(token.type === "END_OF_FILE"){
         //do nothing, and return to parse_program to expect the token
-    }else if(token.type === "DEF" && insideDef > 1){
+    }else if(token.type === "DEF" && indent_stack[indent_stack.length-1][0] > 0){
         alert("Nested Function Declaration is Not Supported at This Time");
         exit();
     }else{
@@ -660,9 +666,7 @@ function parse_stmt(sameLine = false){
                 case "DEF": parse_function_full();
                     break;
                 case "RETURN": 
-                    //TO DO
-                    //USED FOR TESTING FUTURE IMPLEMENTATION
-                    if(insideDef > 0){
+                    if(indent_stack[indent_stack.length-1][0] > 0){
                         parse_return_stmt();
                     }else{
                         //INSERT SYNTAX ERROR
