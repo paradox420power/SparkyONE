@@ -4,14 +4,14 @@ var libFunctions = ["ABS", "BIN", "BOOL", "CHR", "FLOAT", "HEX", "LEN", "OCT", "
     "INPUT", "PRINT", "CEIL", "FLOOR", "SQRT", "COS", "SIN", "TAN", "PI", "E", "RANDOM", "SEED", "RANDINT"];
 var program = "";
 var indent_stack = [];
-//USED FOR TESTING FUTURE IMPLEMENTATION
-var insideDef = 0;
+var encapsulation_stack = [];
 //USED FOR TESTING WHETHER OR NOT THE PARSER RESULTED IN A SYNTAX_ERROR
 var testingResult = true;
+var errorResult = "";
 
 function test(input){
     parse_begin_program(input);
-    return testingResult;
+    return [testingResult, errorResult];
 }
 
 //print parsing error
@@ -24,8 +24,18 @@ function skipSpaces(){
     var token = getToken(program, false);
     if(token.type === "SPACE"){
         program = program.slice(token.length);
+        token = getToken(program,false);
+        if(token.type === "TAB"){
+            skipSpaces();
+        }
         //token = getToken(program, false);
         //document.write("Next Token: " + token.id + "<br>");
+    }else if(token.type === "TAB"){
+        program = program.slice(token.length/8);
+        token = getToken(program,false);
+        if(token.type === "SPACE"){
+            skipSpaces();
+        }
     }
     //else do nothing
 }
@@ -33,59 +43,106 @@ function skipSpaces(){
 // Checks current token with indent_stack for dedent and unexpected indentation
 function check_indents(){
     var token = getToken(program, false);
-    //i know parts seem redundent but it breaks if it isn't like this
-    if(indent_stack.length !== 1){
-        var current = indent_stack.pop();
-        if(token.length > current[1]){
-            //unexpected indent
-            indent_stack = [];
-            indent_stack.push(0);
-            syntax_error("INDENTATION_ERROR");
-        }else if(token.length < current[1]){
-            //possible dedent
-            check_indents();
-        }else if(token.length === current[1]){
-            //matching indent
-            program = program.slice(token.length);
-            indent_stack.push(current[1]);
+
+    if(token.type !== "SPACE" && token.type !== "TAB"){
+        if(indent_stack.length === 1){
+            //There has been no new level of indentation
+            //do nothing as this should be valid
+        }else{
+            //there was a dedent that led to the first indentation level
+            while(indent_stack.length !== 1){
+                indent_stack.pop();
+            }
         }
     }else{
-        if(token.type === "SPACE"){
-            syntax_error("INDENTATION_ERROR");
+        if(indent_stack.length !== 1){
+            
+            var current = indent_stack.pop();
+            if(token.length > current[1]){
+                //unexpected indent
+                indent_stack = [];
+                indent_stack.push([0,0]);
+                //document.write("index syntax error at line " + token.line_no + "<br>Current: " + current + " TabLength: " + token.length + "<br>");
+                syntax_error("INDENTATION_ERROR");
+            }else if(token.length < current[1]){
+                //possible dedent
+                //document.write("Popping: " + current + "<br>");
+                //document.write(indent_stack.toString() + "<br>");
+                check_indents();
+            }else if(token.length === current[1]){
+                //matching indent
+                if(token.type === "SPACE"){
+                    program = program.slice(token.length);
+                }else if(token.type === "TAB"){
+                    program = program.slice(token.length/8);
+                }
+                indent_stack.push(current);
+            }
+        }else{
+            if(token.type === "SPACE" || token.type === "TAB"){
+                syntax_error("INDENTATION_ERROR");
+            }
         }
     }
 }
 
-// T
-function increase_indent(){
+function increase_indent(isDef = false){
     var token = getToken(program, false);
-    if(token.type === "SPACE"){
-        current = indent_stack.pop();
-        if(current === token.length){
-            indent_stack.push(current);
+    if(token.type === "SPACE" || token.type === "TAB"){
+        var current = indent_stack.pop();
+        if(token.length <= current){
+            //TO DO, insert syntax error
+            //expected an indent
+            syntax_error("");
+            //indent_stack.push(current);
         }else{
             indent_stack.push(current);
-            indent_stack.push(token.length);
+            if(isDef){
+                indent_stack.push([current[0]+1, token.length]);
+            }else{
+                indent_stack.push([current[0], token.length]);
+            }
             //document.write("Token: " + token.type + " adding " + token.length + " to stack at line " + token.line_no + "<br>");
         }
+    }else{
+        //TO DO, insert syntax error
+        //expected a new level of indentation
+        syntax_error("");
     }
 }
 
-//TO DO
-//Consider using saveSpaces as a way to help with the potential danger of peek_2_ahead
 //used to save potentially useful spaces
 function saveSpaces(){
     var token = getToken(program, false);
-    if(token.type === "SPACE"){
-        return token.length;
+    if(token.type === "SPACE" || token.type === "TAB"){
+        return [token.length, token.type];
+    }else{
+        return [0, "SPACE"];
     }
 }
 
 function returnHeldSpaces(spaces){
-    allSpaces = "";
-    for(x = 0; x < spaces; x++)
-        allSpaces += " ";
-    program = allSpaces + program;
+    //document.write("<br>" + spaces + "<br>");
+    if (typeof spaces === 'undefined'){
+        //Occurs in the case of an end_of_file
+        //the program has ended so there is no reason to return the spaces back to the program
+    }else{
+        if(spaces[1] === "SPACE"){
+            var allSpaces = "";
+            for(var x = 0; x < spaces[0]; x++)
+                allSpaces += " ";
+            program = allSpaces + program;
+        }else if(spaces[1] === "TAB"){
+            var allSpaces = "";
+            for(var x = 0; x < spaces[0]/8; x++)
+                allSpaces += "\t";
+            program = allSpaces + program;
+        }else{
+            //TO DO
+            //INSERT SYNTAX ERROR
+            syntax_error("");
+        }
+    }
 }
 
 //reads & returns next token, ignoring spaces
@@ -96,32 +153,53 @@ function peek(){
 }
 
 //use very carefully because if the first token peeked is a line break, skip spaces when peeking a second time might alter indents
-function peek_2_ahead(){ //necessary for a few location is parser
+function peek_2_ahead(){ //necessary for a few location in parser
     skipSpaces();
     var token = getToken(program, false);
     program = program.slice(token.length);
+    var spaceCount = saveSpaces();
     var returnToken = peek();
-    program = token.id + " " + program; //return skipped token & arbitrary space skipped by peek
+    returnHeldSpaces(spaceCount);
+    program = token.id + program; //return skipped token & the spacing after it
     return returnToken;
 }
 
  //reads next token, throws an error if they don't match
  // & splices token from input, ignoring spaces
-function expect(tokenType){
+function expect(tokenType, inString = false){
     skipSpaces();
     var token = getToken(program, true);
     if(token.type === tokenType){
+        if(!inString){
+            if(["LPAREN", "LBRACE", "LBRACKET"].includes(token.type)){
+                encapsulation_stack.push(token.type);
+            }else if(["RPAREN", "RBRACE", "RBRACKET"].includes(token.type)){
+                if(encapsulation_stack[encapsulation_stack.length-1].substring(1) === (token.type).substring(1)){
+                    encapsulation_stack.pop();
+                }else{
+                    //TO DO
+                    //INSERT SYNTAX ERROR
+                    //Occured
+                    syntax_error("");
+                }
+            }
+        }
         program = program.slice(token.length);
-        if(token.type === "END_OF_LINE"){
-            incrementCodeLine();
+        
+        if(encapsulation_stack.length !== 0 && !inString){
             readEmptyLines();
-            //check correct indents (stack issue)
-            //check_indents();
+        }else{
+            if(token.type === "END_OF_LINE"){
+                readEmptyLines();
+                //check correct indents (stack issue)
+                //check_indents();
+            }
         }
         //document.write(token.type + " read at line " + token.line_no + "<br>"); //comment this out when not trouble shooting
+
     }else{
         program = program.slice(token.length); //unnecessary to slice since an error is thrown
-        error_expected_not_matching(tokenType, token.type, token.line_no);
+        //error_expected_not_matching(tokenType, token.type, token.line_no);
     }
     //document.write(program + "<br><br>");
     return token;
@@ -134,7 +212,7 @@ function readEmptyLines(){
     if(token.type === "SPACE"){
         program = program.slice(token.length); //slice off the spaces
         token2 = getToken(program, false);
-        if(token2.type === "END_OF_LINE"){ //if next is line break, its ok
+        if(token2.type === "END_OF_LINE" || token2.type === "TAB"){ //if next is line break, its ok
             readEmptyLines();
         }else{ //some keyword was read & the spaces could be indent that need to be read
             if(token.type === "SPACE"){
@@ -146,16 +224,32 @@ function readEmptyLines(){
                 program = token.id + "" + program; //add spliced id back to front of program
             }
         }
+    }else if(token.type === "TAB"){
+        program = program.slice(token.length/8); //slice off the tab
+        token2 = getToken(program, false);
+        if(token2.type === "END_OF_LINE" || token2.type === "SPACE"){ //if next is line break, its ok
+            readEmptyLines();
+        }else{ //some keyword was read & the spaces could be indent that need to be read
+            if(token.type === "TAB"){
+                for(i = 0; i < token.length/8; i++){
+                    program = "\t" + program;
+                }
+                //increase_indent();
+            }else{//TO DO: This never ends up being called...why is it here?
+                program = token.id + "" + program; //add spliced id back to front of program
+            }
+        }
     }else if(token.type === "END_OF_LINE"){
         program = program.slice(token.length);
-        incrementCodeLine();
         readEmptyLines();
     }
 }
 
 function parse_begin_program(input){
     program = input;
-    indent_stack.push(0);
+    indent_stack.push([0,0]);
+    //TO DO
+    //var spaceCount = saveSpaces();
     var token = peek();
     if(token.type === "END_OF_LINE")
         expect("END_OF_LINE"); //this will precede to read all empty lines
@@ -197,7 +291,7 @@ function parse_import_list(){
     }
     var spaceCount = saveSpaces(); //need to be held on to for indent stack purposes
     token = peek();
-    returnHeldSpaces(spaceCount); //now that we've peeked the next token we reutnr the spaces
+    returnHeldSpaces(spaceCount); //now that we've peeked the next token we return the spaces
     if(token.type === "IMPORT" || token.type === "FROM"){
         parse_import_list();
     }
@@ -306,20 +400,61 @@ function parse_program(){
     }
 }
 
+function parse_function_call(){
+    expect("ID");
+    expect("LPAREN");
+    var token = peek();
+    var optionalOnly = false;
+    while(token.type !== "RPAREN" && token.type !== "END_OF_FILE"){
+        
+        if(!optionalOnly){
+            if(token.type === "ID"){
+                var token2 = peek_2_ahead();
+
+                if(token2.type === "ASSIGN_EQUALS"){
+                    expect("ID");
+                    expect("ASSIGN_EQUALS");
+                    parse_expr();
+                    optionalOnly = true;
+                }else{
+                    parse_expr();
+                }
+                token = peek();
+                if(token.type === "COMMA"){
+                    expect("COMMA");
+                    token = peek();
+                }
+            }else{
+                parse_expr();
+                token = peek();
+                if(token.type === "COMMA"){
+                    expect("COMMA");
+                    token = peek();
+                }
+            }
+        }else{
+            expect("ID");
+            expect("ASSIGN_EQUALS");
+            parse_expr();
+            token = peek();
+            if(token.type === "COMMA"){
+                expect("COMMA");
+                token = peek();
+            }
+        }
+    }
+    expect("RPAREN");
+}
+
 //TO DO
-//Does not cover nested function declarations
+//Is not meant to cover nested function declarations
 function parse_function_full(){
     parse_function_def();
     var token = getToken(program, false);
     //After the definition of the function there should be an indent for the body of the function
-    if(token.type === "SPACE"){
-        if(indent_stack[indent_stack.length-1] < token.length){
-            increase_indent();
-            parse_body();
-        }else{
-            //INSERT SYNTAX ERROR, actually an indentation error
-            syntax_error("");
-        }
+    if(token.type === "SPACE" || token.type === "TAB"){
+        increase_indent(true);
+        parse_stmt_list();
     }else{
         syntax_error("");
     }
@@ -328,136 +463,233 @@ function parse_function_full(){
 
 function parse_function_def(){
     expect("DEF");
-    expect("ID"); //should this ID then be added to reservedWords?
-    expect("LPAREN");
     var token = peek();
-    if(token.type !== "RPAREN"){
-        parse_parameter_list();
-    }
-    expect("RPAREN");
-    expect("COLON");
-    expect("END_OF_LINE");
-}
+    if(token.type === "ID"){
+        expect("ID");
+        expect("LPAREN");
+        var token = peek();
 
-function parse_parameter_list(){
-    expect("ID");
-    var token = peek();
-    if(token.type === "COMMA"){
-        expect("COMMA");
-        token = peek();
         if(token.type !== "RPAREN"){
             parse_parameter_list();
+        }
+        
+        expect("RPAREN");
+        expect("COLON");
+        expect("END_OF_LINE");
+    }else{
+        if(libFunctions.includes(token.type)){
+            //TO DO
+            //INSERT SYNTAX ERROR
+            //We don't allow shadowing of library functions at this time.
+            syntax_error("");
+        }else{
+            //TO DO
+            //Expected a variable name/ID token
+            syntax_error("");
         }
     }
 }
 
-function parse_body(){
-    //TO DO
-    //Just make into stmt_list?
-    //When the first RETURN is received go back to function full 
-    //Read the return_stmt
-    //continue reading until a dedent is noticed as syntax apparently doesn't matter after that if it's in the same scope...
+function parse_parameter_list(){
     var token = peek();
-    if(token.type === "RETURN"){
-        parse_return_stmt();
+    var paraList = [];
+    var optParaOccurred = false;
+    
+    while(token.type !== "RPAREN" && token.type !== "END_OF_FILE"){
+        
+        if(token.type === "ID" && !paraList.includes(token.id)){
+            paraList.push(token.id);
+            
+            if(!optParaOccurred){
+                var token2 = peek_2_ahead();
+                
+                if(token2.type === "COMMA"){ //required parameter argument, with potentially more arguments to come
+                    expect("ID");
+                    expect("COMMA");
+                    token = peek();
+                }else if(token2.type === "ASSIGN_EQUALS"){ //optional parameter argument
+                    expect("ID");
+                    expect("ASSIGN_EQUALS");
+                    parse_expr();
+                    optParaOccurred = true;
+                    token = peek();
+                    if(token.type === "COMMA"){//potentially more arguments to come
+                        expect("COMMA");
+                        token = peek();
+                    }
+                }else if(token2.type === "RPAREN"){//required parameter argument, with none left to follow
+                    expect("ID");
+                    token = peek();
+                }else{
+                    //TO DO
+                    //INSERT SYNTAX ERROR
+                    //unexpected character
+                    syntax_error("");
+                }
+            }else if(optParaOccurred){//All remaining arguments must follow they syntax of an optional parameter
+                var token2 = peek_2_ahead();
+                
+                if(token2.type === "ASSIGN_EQUALS"){//optional
+                    expect("ID");
+                    expect("ASSIGN_EQUALS");
+                    parse_expr();
+                    optParaOccurred = true;
+                    token = peek();
+                    if(token.type === "COMMA"){
+                        expect("COMMA");
+                        token = peek();
+                    }
+                }else{
+                    //TO DO
+                    //INSERT SYNTAX ERROR
+                    //unexpected character
+                    syntax_error("");
+                }
+            }
+        }else{
+            if(paraList.includes(token.id)){
+                //TO DO
+                //INSERT SYNTAX ERROR
+                //SyntaxError: duplicate argument 'parameter' in function definition
+                syntax_error("");
+            }else{
+                //TO DO
+                //INSERT SYNTAX ERROR
+                //Expected an ID
+                syntax_error("");
+            }
+            token = peek();
+        }
     }
 }
-
-/*function parse_new_body(){
-    
-}
-
-function parse_body_no_indent(){
-    
-}*/
 
 function parse_return_stmt(){
     expect("RETURN");
     var token = peek();
-    if(token.type === "END_OF_LINE" || token.type === "SEMICOLON" || "END_OF_FILE"){
+    if(["END_OF_LINE","SEMICOLON", "END_OF_FILE"].includes(token.type)){
         //do nothing, return to parse_body which will cover the expectation of one these tokens
     }else{
         parse_expr();
     }
 }
 
-function parse_stmt_list(){
-    parse_stmt();
+function parse_stmt_list(onSameLine = false){
+    parse_stmt(onSameLine);
     var token = peek();
+    var spaceCount;
+    var sameLine = onSameLine;
+    
     if(token.type !== "END_OF_FILE"){//some statements are the end of the program & won't have a line break
         if(token.type === "END_OF_LINE"){
             expect("END_OF_LINE");
+            spaceCount = saveSpaces();//need to be held on to for indent stack purposes
+            token = peek();
+            returnHeldSpaces(spaceCount);//now that we've peeked the next token we return the spaces
         }else if(token.type === "SEMICOLON"){
             expect("SEMICOLON");
+            sameLine = true;
+            spaceCount = saveSpaces();//need to be held on to for indent stack purposes
             token = peek(); //sometimes a semicolon is followed by a line break
-            if(token.type === "END_OF_LINE")
+            if(token.type === "END_OF_LINE"){
                 expect("END_OF_LINE");
+                spaceCount = saveSpaces();//need to be held on to for indent stack purposes
+                sameLine = false;
+            }
+            token = peek();
+            returnHeldSpaces(spaceCount);//now that we've peeked the next token we return the spaces
         }else{
             //TO DO
             //INSERT SYNTAX ERROR
             syntax_error("");
         }
     }
-    //var stmt_Starts = ["IF", "FOR", "WHILE", "ID", "RETURN", "HASH_TAG"];
-    var spaceCount = saveSpaces(); //need to be held on to for indent stack purposes
-    
-    token = peek();
-    returnHeldSpaces(spaceCount); //now that we've peeked the next token we return the spaces
     
     if(token.type === "END_OF_FILE"){
         //do nothing, and return to parse_program to expect the token
-    }else if(token.type === "DEF" && insideDef > 1){
+    }else if(token.type === "DEF" && indent_stack[indent_stack.length-1][0] > 0){
         alert("Nested Function Declaration is Not Supported at This Time");
         exit();
     }else{
-        parse_stmt_list();
+        parse_stmt_list(sameLine);
     }
 }
 
-function parse_stmt(){
-    check_indents();
+function parse_stmt(sameLine = false){
+    var spaceCount = saveSpaces(); //need to be held on to for indent stack purposes
     var token = peek();
-    if(bgnTokens.includes(token.type)){
-        switch(token.type){
-            case "IF": parse_if_stmt();
-                break;
-            case "FOR": parse_for_stmt();
-                break;
-            case "WHILE": parse_while_stmt();
-                break;
-            case "ID": parse_assign_stmt();
-                break;
-            //TO DO
-            //Account for multiline comments
-            case "HASH_TAG": parse_comment();
-                break;
-            case "DEF": parse_function_full();
-                break;
-            case "RETURN": 
-                //TO DO
-                //USED FOR TESTING FUTURE IMPLEMENTATION
-                if(insideDef > 0){
-                    parse_return_stmt();
-                }else{
-                    //INSERT SYNTAX ERROR
-                    //return used outside of function call
-                    syntax_error("");
-                }
-                break;
-            default: syntax_error("INVALID_STATEMENT");
-                break;
+
+    if(token.type === "HASH_TAG"){
+        //Multiline comments are accounted for by parse_expr() as they are subject to indentation
+        parse_comment();
+    }else{
+        returnHeldSpaces(spaceCount); //now that we've peeked the next token we return the spaces
+        if(!sameLine){
+            check_indents();
         }
-    }else{//This is for when an expression is used outside of assigning it to a variable
-        if(["PLUS", "MINUS", "INCREMENT", "DECREMENT"].includes(token.type)){
-            expect(token.type);
-            token = peek();
-            while(["PLUS", "MINUS", "INCREMENT", "DECREMENT"].includes(token.type)){
-                expect(token.type);
-                token = peek();
+        var token = peek();
+        if(bgnTokens.includes(token.type)){
+            switch(token.type){
+                case "IF": parse_if_stmt();
+                    break;
+                case "FOR": parse_for_stmt();
+                    break;
+                case "WHILE": parse_while_stmt();
+                    break;
+                case "ID": 
+                    var tempInput = program;
+                    var token2 = peek_2_ahead();
+                    
+                    if(token2.type === "LBRACE"){//list[0] = ...
+                        expect("ID");
+                        expect("LBRACE");
+                        parse_expr();//Validity should be handled by runtime implementation.
+                        token2 = peek();
+                        if(token2.type === "COLON"){//list[0:2] = ...
+                            expect("COLON");
+                            parse_expr();//Validity should be handled by runtime implementation.
+                        }
+                        expect("RBRACE");
+                        token2 = peek();
+                        program = tempInput;
+                    }
+                    
+                    if(token2.type === "ASSIGN_EQUALS"){
+                        parse_assign_stmt();
+                    }else if(token2.type === "COMMA"){ //a,b,c,d = 1,2,3,4
+                        parse_multi_val_assign_stmt();      
+                    }else if(token2.type === "PERIOD"){ //TO DO: function call on object
+                        
+                    }else{
+                        parse_expr();
+                    }
+                    break;
+                case "DEF": parse_function_full();
+                    break;
+                case "RETURN": 
+                    if(indent_stack[indent_stack.length-1][0] > 0){
+                        parse_return_stmt();
+                    }else{
+                        //INSERT SYNTAX ERROR
+                        //return used outside of function call
+                        syntax_error("");
+                    }
+                    break;
+                default: syntax_error("INVALID_STATEMENT");
+                    break;
             }
-            parse_expr();
-        }else{
-            parse_expr();
+        }else{//This is for when an expression is used outside of assigning it to a variable
+            while(!["END_OF_LINE", "END_OF_FILE", "SEMICOLON"].includes(token.type)){
+                while(["PLUS", "MINUS", "INCREMENT", "DECREMENT"].includes(token.type)){
+                    expect(token.type);
+                    token = peek();
+                }
+                parse_expr();
+                token = peek();
+                if(token.type === "COMMA"){
+                    expect("COMMA");
+                    token = peek();
+                }
+            }
         }
     }
 }
@@ -491,20 +723,46 @@ function parse_else_stmt(){
 }
 
 function parse_conditional(){
-    parse_primary();
     var token = peek();
-    var compare_ops = ["COMPARE_EQUALS", "NOT_EQUAL", "LESS_THAN", "LESS_THAN_EQUAL", "GREATER_THAN", "GREATER_THAN_EQUAL"];
-    if(compare_ops.includes(token.type)){
-        parse_comparison_operator();
-        parse_primary();
+    while(token.type === "NOT"){
+        expect("NOT");
         token = peek();
-        var link_ops = ["AND", "OR"];
-        if(link_ops.includes(token.type)){
+    }
+    parse_expr();
+    token = peek();
+    var compare_ops = ["COMPARE_EQUALS", "NOT_EQUAL", "LESS_THAN", "LESS_THAN_EQUAL", "GREATER_THAN", "GREATER_THAN_EQUAL"];
+    var link_ops = ["AND", "OR"];
+    let moreToCompare = false;
+    if(compare_ops.includes(token.type) || link_ops.includes(token.type))
+        moreToCompare = true;
+    while(moreToCompare){
+        if(compare_ops.includes(token.type)){
+            parse_comparison_operator();
+            token = peek();
+            while(token.type === "NOT"){
+                expect("NOT");
+                token = peek();
+            }
+            parse_expr();
+            token = peek();
+            if(!compare_ops.includes(token.type) && !link_ops.includes(token.type))
+                moreToCompare = false;
+        }else if(link_ops.includes(token.type)){
             parse_comparison_link();
-            parse_conditional();
+            token = peek();
+            while(token.type === "NOT"){
+                expect("NOT");
+                token = peek();
+            }
+            parse_expr();
+            token = peek();
+            if(!compare_ops.includes(token.type) && !link_ops.includes(token.type))
+                moreToCompare = false;
+        }else{
+            syntax_error("INVALID_COND_OPERATOR");
+            moreToCompare = false;
         }
-    }else{
-        syntax_error("INVALID_COND_OPERATOR");
+        token = peek();
     }
 }
 
@@ -619,14 +877,23 @@ function parse_while_stmt(){
     parse_stmt_list();
 }
 
-//TO DO
-//Consider how to handle this tuple case: t = (1,2,3); a,b,c = t;
-//Might need to add a case in parse_multi_val_assign_stmt(); to accomdate.
-//That, or find a way to differentiate between the two.
 function parse_assign_stmt(){
     var multi_token = peek(); //used in the case we need to unget the ID, for the multi_val_assign_stmt
     expect("ID");
     var token = peek();
+    
+    if(token.type === "LBRACE"){//list[0] = ...
+        expect("LBRACE");
+        parse_expr();//Validity should be handled by runtime implementation.
+        token = peek();
+        if(token.type === "COLON"){//list[0:2] = ...
+            expect("COLON");
+            parse_expr();//Validity should be handled by runtime implementation.
+        }
+        expect("RBRACE");
+        token = peek();
+    }
+    
     var math_assigns = ["ADD_ASSIGN", "SUB_ASSIGN", "MULT_ASSIGN", "DIV_ASSIGN", "MOD_ASSIGN"];
     if(math_assigns.includes(token.type)){ //calc & assign statements
         parse_assign_op();
@@ -641,8 +908,6 @@ function parse_assign_stmt(){
                 parse_assign_stmt();
             }else{ //else an id should be a primary/expression
                 parse_expr();
-                //TO DO
-                //Maybe a while loop to account for commas being used to create a tuple that doesn't utilize paranthesis
                 token = peek();
                 while(token.type === "COMMA"){
                     expect("COMMA");
@@ -659,72 +924,19 @@ function parse_assign_stmt(){
                     token = peek();
                 }
             }
-            //TO DO
-            //Probably get rid of the switch case altogether and just call parse_expr
-            //Obviously excessive for final implementation
-            switch(token.type){
-                case "LPAREN":
-                case "LBRACE":
-                case "NUMBER":
-                case "FLOAT":
-                case "TRUE":
-                case "FALSE":
-                case "APOSTROPHE":
-                case "QUOTE": 
-                case "NONE":
-                case "ABS":
-                case "BIN":
-                case "BOOL":
-                case "CHR":
-                case "FLOAT":
-                case "HEX":
-                case "LEN":
-                case "OCT": 
-                case "ORD":
-                case "STR":
-                case "INT":
-                case "MAX":
-                case "MIN":
-                case "INPUT":
-                case "PRINT":
-                case "MATH":
-                case "CEIL":
-                case "FLOOR":
-                case "SQRT": 
-                case "COS": 
-                case "SIN": 
-                case "TAN": 
-                case "PI": 
-                case "E": 
-                case "RANDOM":
-                case "RANDINT":
-                case "SEED":
+            parse_expr();
+            token = peek();
+            while(token.type === "COMMA"){//Used for potential tuple creation
+                expect("COMMA");
+                var token2 = peek();
+                if(token2.type !== "END_OF_LINE" && token2.type !== "SEMICOLON" && token2.type !== "END_OF_FILE"){
                     parse_expr();
                     token = peek();
-                    while(token.type === "COMMA"){//Used for potential tuple creation
-                        expect("COMMA");
-                        var token2 = peek();
-                        if(token2.type !== "END_OF_LINE" && token2.type !== "SEMICOLON" && token2.type !== "END_OF_FILE"){
-                            parse_expr();
-                            token = peek();
-                        }else{
-                            token = peek();
-                        }
-                    }
-                    break;
-                case "INPUT": parse_input_stmt();
-                    break;
-                default: syntax_error("INVALID_RHS");
-                    break;
+                }else{
+                    token = peek();
+                }
             }
         }
-    }else if(token.type === "COMMA"){ //a,b,c,d = 1,2,3,4
-        //TO DO
-        //Account for tuple assignment
-        program = ungetToken(program, multi_token);
-        parse_multi_val_assign_stmt();      
-    }else if(token.type === "PERIOD"){ //TO DO: function call
-        
     }else if(token.type === "END_OF_LINE" || token.type === "SEMICOLON"){ //end of assign stmt recursion expected
         //do nothing
     }else{
@@ -732,45 +944,84 @@ function parse_assign_stmt(){
     }
 }
 
-//TO DO
-//Consider how to handle this tuple case: t = (1,2,3); a,b,c = t; a,b,c = (1,2,3)
-//Might need to add a case in parse_multi_val_assign_stmt(); to accomdate.
-//That, or find a way to differentiate between the two.
-function parse_multi_val_assign_stmt(){ //a,b,c,d = 1,2,3,4
-    expect("ID");
-    //TO DO cont.
-    //This is most likely a syntax error.
-    //This function will likely need a parameter to count the number of variables being set
-    //and compare that to the number of values being used to set those variables.
-    //Could return a value denoting whether there were not enough, or too many, values received (i.e. positive/negative integer value).
-    //If the value is equal to 0 then we can say that this was a valid assignment.
+/* This function handles a few potential cases.
+ * The two general cases are: 
+ *   1. The occurence of multiiple value assignment statements
+ *      i.   a,b,c,d = 1,2,3,4
+ *      ii.  a,b[0],c = 1,2,3
+ *      iii. a,b[0:2],c = 1, [0,1,2], 1
+ *      iv.  a,b,c, = (1,2,3)
+ *   2. The occurence of tuples not inside of an assignment statement.
+ *      i.   a,
+ *      ii.  a, b, c 
+ *      iii. a + 4, b
+ * Determining the general difference between the two is done by the occurence of an ASSIGN_EQUALS token,
+ * which denotes a multiple value assignment statement, or the occurence of a token that is neither an
+ * ASSIGN_EQUALS token nor a COMMA token, which denotes a possible tuple.
+ * 
+ * It is important to note that the runtime implementation is expected to determine the validity of the
+ * righ hand side assignment. This is why there are no hard checks in the parsing to determine whether 
+ * the same number of elements are on both sides.
+ */
+function parse_multi_val_assign_stmt(){
     var token = peek();
-    if(token.type === "ASSIGN_EQUALS"){
-        expect("ASSIGN_EQUALS");
-        token = peek();
-        var applicable = ["FLOAT","NUMBER","ID", "TRUE", "FALSE", "LPAREN", "LBRACKET", "LBRACE", "APOSTROPHE", "QUOTE"];  
-        if(applicable.includes(token.type)){
-            parse_expr();
-        }else{
-            syntax_error("INVALID_ASSIGNMENT");
-        }
-    }else if(token.type === "COMMA"){
-        expect("COMMA");
-        parse_multi_val_assign_stmt();
-        token = peek();
-        //TO DO cont.
-        //Processing...
-        if(token.type === "COMMA"){
-            expect("COMMA");
-            token = peek();
-            var applicable = ["FLOAT","NUMBER","ID", "TRUE", "FALSE", "LPAREN", "LBRACKET", "LBRACE", "APOSTROPHE", "QUOTE"];
-            if(applicable.includes(token.type)){
-                parse_expr();
-            }else{
-                syntax_error("INVALID_ASSIGNMENT");
+    var possTuple = true;
+    var possAssign = true;
+    
+    //Look for an ending marker that indicates the termination of this statement
+    while(!["END_OF_LINE", "END_OF_FILE", "SEMICOLON"].includes(token.type)){ 
+        if(possAssign && possTuple){//The parsing could still result in a tuple or assignment statement
+            if(token.type === "ID"){
+                var token2 = peek_2_ahead();
+                if(token2.type === "COMMA"){//Matched both patterns
+                    expect("ID");
+                    expect("COMMA");
+                    token = peek();
+                }else if(token2.type === "ASSIGN_EQUALS"){//Matches assignment statement, does not match tuple
+                    expect("ID");
+                    expect("ASSIGN_EQUALS");
+                    possTuple = false;
+                }else if(token2.type === "LBRACE"){//Possibly matches an array element
+                    var tempInput = program;//Used in case we need to call parse_expr()
+                    expect("ID");
+                    expect("LBRACE");
+                    parse_expr();//Validity should be handled by runtime implementation.
+                    token2 = peek();
+                    if(token2.type === "COLON"){//list[0:2]
+                        expect("COLON");
+                        parse_expr();//Validity should be handled by runtime implementation.
+                    }
+                    expect("RBRACE");
+                    
+                    token2 = peek();
+                    if(token2.type === "COMMA"){//Matches both assignment statement and potential tuple
+                        expect("COMMA");
+                        token = peek();
+                    }else if(token2.type === "ASSIGN_EQUALS"){//Matches assignment statement, does not match tuple
+                        expect("ASSIGN_EQUALS");
+                        possTuple = false;
+                    }else{//Otherwise, a different token was received meaning it can't be an Assignment Statement, but could be a tuple
+                        possAssign = false;
+                        program = tempInput;//return to previously unparsed list[] declaration
+                        token = peek();
+                    }
+                }else{//Otherwise, a different token was received meaning it can't be an Assignment Statement, but could be a tuple
+                    possAssign = false;
+                    token = peek();
+                }
+            }else if(token.type === "ASSIGN_EQUALS"){//Used in the case of: a,b,c, = 1,2,3
+                expect("ASSIGN_EQUALS");
+                possTuple = false;
             }
         }else{
-            syntax_error("INVALID_ASSIGNMENT");
+            //Either an ASSIGN_EQUALS was reached, and now the right hand side it being parsed
+            //or an assignment statement is no longer possible and we must parse the remainder of the tuple
+            parse_expr();//validity should be handled by runtime
+            token = peek();
+            if(token.type === "COMMA"){
+                expect("COMMA");
+                token = peek();
+            }
         }
     }
 }
@@ -800,12 +1051,19 @@ function parse_assign_op(){
 
 function parse_primary(){
     var token = peek();
-    var primaries = ["ID", "NUMBER", "FLOAT", "TRUE", "FALSE", "QUOTE", "APOSTROPHE", "NONE"];
+    //document.write("Token: " + token.type + " " + token.id + "<br>")
+    var primaries = ["ID", "NUMBER", "BINARY", "OCTAL", "HEX", "FLOAT", "TRUE", "FALSE", "QUOTE", "APOSTROPHE", "NONE"];
     if(primaries.includes(token.type)){
         switch(token.type){
             case "ID": expect("ID");
                 break;
             case "NUMBER": expect("NUMBER");
+                break;
+            case "BINARY": expect("BINARY");
+                break;
+            case "OCTAL": expect("OCTAL");
+                break;
+            case "HEX": expect("HEX");
                 break;
             case "FLOAT": expect("FLOAT");
                 break;
@@ -814,11 +1072,18 @@ function parse_primary(){
             case "FALSE": expect("FALSE");
                 break;
             case "APOSTROPHE":
-            case "QUOTE": parse_string();
+            case "QUOTE": 
+                var isMulti = multi_str_comment_check();
+                if(isMulti)
+                    parse_multi_str_comment();
+                else
+                    parse_string();
                 break;
             case "NONE": expect("NONE");
                 break;
-            default: syntax_error("INVALID_PRIMARY");
+            default: 
+                //document.write("Token: " + token.type + " " + token.id + "<br>")
+                syntax_error("INVALID_PRIMARY");
                 break;
         }
     }else{
@@ -826,33 +1091,147 @@ function parse_primary(){
     }
 }
 
+
+function multi_str_comment_check(){
+    var token = peek();
+    var isMulti = false;
+    
+    if(token.type === "QUOTE"){
+        expect("QUOTE", true);
+        token = getToken(program, false);
+        if(token.type === "QUOTE"){
+            expect("QUOTE", true);
+            token = getToken(program, false);
+            if(token.type === "QUOTE")
+                isMulti = true;
+            program = "\"" + program;
+        }
+        program = "\"" + program;
+    }else if(token.type === "APOSTROPHE"){
+        expect("APOSTROPHE", true);
+        token = getToken(program, false);
+        if(token.type === "APOSTROPHE"){
+            expect("APOSTROPHE", true);
+            token = getToken(program, false);
+            if(token.type === "APOSTROPHE")
+                isMulti = true;
+            program = "\'" + program;
+        }
+        program = "\'" + program;
+    }
+    
+    return isMulti;
+}
+
 //TO DO
 function parse_string(){
     var token = peek();
+    var lineNum = token.line_no;
     //document.write(token.type + "<br><br>");
     if(token.type === "QUOTE"){
-        expect("QUOTE");
+        expect("QUOTE", true);
         token = peek();
-        while(token.type !== "QUOTE"){
+        while(token.type !== "QUOTE" && token.type !== "END_OF_FILE"){
             //document.write(token.type + "<br><br>");
-            expect(token.type);
+            expect(token.type, true);
             token = peek();
+        }
+        if(token.line_no !== lineNum){//The quotations should be on the same line
+            //TO DO
+            //INSERT SYNTAX ERROR
+            syntax_error("");
         }
         expect("QUOTE");
     }else if(token.type === "APOSTROPHE"){
-        expect("APOSTROPHE");
+        expect("APOSTROPHE", true);
         token = peek();
         while(token.type !== "APOSTROPHE"){
             //document.write(token.type + "<br><br>");
-            expect(token.type);
+            expect(token.type, true);
             token = peek();
+        }
+        if(token.line_no !== lineNum){//The quotations should be on the same line
+            //TO DO
+            //INSERT SYNTAX ERROR
+            syntax_error("");
         }
         expect("APOSTROPHE");
     }
 }
 
-//TO DO
-//Create for list declaration 
+function parse_multi_str_comment(){
+    var token = peek();
+    if(token.type === "QUOTE"){
+        //There's always a check to affirm that these quotes happened in sequence before this function's call,
+        //otherwise the below could cause an error where spaces are skipped. Meaning instead of """ we get "" "
+        //which are not equivalent
+        expect("QUOTE", true);
+        expect("QUOTE", true);
+        expect("QUOTE", true);
+        token = peek();
+        
+        while(token.type !== "QUOTE" && token.type !== "END_OF_FILE"){
+            //document.write(token.type + "<br><br>");
+            expect(token.type, true);
+            token = peek();
+        }
+        
+        expect("QUOTE", true);
+        token = getToken(program,false);
+        if(token.type === "QUOTE"){
+            expect("QUOTE", true);
+            token = getToken(program, false);
+            if(token.type === "QUOTE"){
+                expect("QUOTE");
+            }else{
+                //TO DO
+                //INSERT SYNTAX ERROR
+                //EOF while scanning triple-quoted string literal
+                syntax_error("");
+            }
+        }else{
+            //TO DO
+            //INSERT SYNTAX ERROR
+            //EOF while scanning triple-quoted string literal
+            syntax_error("");
+        }
+    }else if(token.type === "APOSTROPHE"){
+        //There's always a check to affirm that these apostrophes happened in sequence before this function's call,
+        //otherwise the below could cause an error where spaces are skipped. Meaning instead of """ we get "" "
+        //which are not equivalent
+        expect("APOSTROPHE", true);
+        expect("APOSTROPHE", true);
+        expect("APOSTROPHE", true);
+        token = peek();
+        
+        while(token.type !== "APOSTROPHE" && token.type !== "END_OF_FILE"){
+            //document.write(token.type + "<br><br>");
+            expect(token.type, true);
+            token = peek();
+        }
+        
+        expect("APOSTROPHE", true);
+        token = getToken(program,false);
+        if(token.type === "APOSTROPHE"){
+            expect("APOSTROPHE", true);
+            token = getToken(program, false);
+            if(token.type === "APOSTROPHE"){
+                expect("APOSTROPHE");
+            }else{
+                //TO DO
+                //INSERT SYNTAX ERROR
+                //EOF while scanning triple-quoted string literal
+                syntax_error("");
+            }
+        }else{
+            //TO DO
+            //INSERT SYNTAX ERROR
+            //EOF while scanning triple-quoted string literal
+            syntax_error("");
+        }
+    }
+}
+
 function parse_list(){
     var token = peek();
     if(token.type === "LBRACE"){//Start of a list
@@ -994,17 +1373,15 @@ function parse_dictionary(){
     }
 }
 
-//TO DO
-//Consider String implementation
 function parse_dictionary_content(){
     var token = peek();
-    var valid_types = ["NUMBER", "FLOAT", "ID", "LPAREN", "TRUE", "FALSE", "APOSTROPHE", "QUOTE"];
-    if(valid_types.includes(token.type)){//TO DO: This will have to account for potentially invalid variables/tuples when runtime is incorporated.
+    if(token.type !== "RBRACKET" && token.type !== "END_OF_FILE"){
         parse_expr();
         token = peek();
         if(token.type === "COLON"){
             expect("COLON");
             parse_expr();
+            token = peek();
             if(token.type === "COMMA"){
                 expect("COMMA");
                 parse_dictionary_content();
@@ -1012,19 +1389,9 @@ function parse_dictionary_content(){
         }else{
             syntax_error("");//INSERT SYNTAX ERROR
         }
-    }else{
-        syntax_error("");//INSERT SYNTAX ERROR
     }
 }
 
-//TO DO
-function parse_set(){
-    
-}
-
-//TO DO
-//Address how to incorporate function calls on Strings.
-//Consider future implementations of calling functions on other objects, consider slight redesign.
 function parse_expr(){
     var token = peek();
     if(token.type === "ID"){
@@ -1039,7 +1406,7 @@ function parse_expr(){
                 //Currently no other functions supported
                 //So throw error
                 syntax_error("NON_FORMAT_ERROR");
-            }//TO DO: double check the below else if statement.
+            }
         }else if(token2.type === "LBRACE"){//list2 = list[0]
             expect("LBRACE");
             parse_expr();//Validity should be handled by runtime implementation.
@@ -1049,13 +1416,21 @@ function parse_expr(){
                 parse_expr();//Validity should be handled by runtime implementation.
             }
             expect("RBRACE");
+        }else if(token2.type === "LPAREN"){//functionCall()
+            program = ungetToken(program, token);
+            parse_function_call();
         }
         //otherwise just parse the ID primary and continue parsing potential expression
     }else if(token.type === "APOSTROPHE" || token.type === "QUOTE"){
         var string_content = program;
-        parse_string();
+        var isMulti = multi_str_comment_check();//
+        if(isMulti)
+            parse_multi_str_comment();
+        else
+            parse_string();
         string_content = string_content.substring(0,string_content.indexOf(program));
-                
+        //document.write("String content:" +string_content + "<br>");
+        
         var token2 = peek();
         if(token2.type === "PERIOD"){//Used in case of a function, in this case we only have the format function
             token2 = peek_2_ahead();
@@ -1097,7 +1472,12 @@ function parse_expr(){
                     parse_primary();
                 }
                 break;
-            case "HEX": parse_hex_function();
+            case "HEX": 
+                if(token.id === "hex"){
+                    parse_hex_function();
+                }else{
+                    parse_primary();
+                }
                 break;
             case "LEN": parse_len_function();
                 break;
@@ -1165,15 +1545,7 @@ function parse_expr(){
     }else if(compare_ops.includes(token.type)){
         parse_comparison_operator();
         parse_expr();
-    }/*else if(token.type === "COMMA"){
-        //TO DO
-        //COULD HAVE ADVERSE SIDE EFFECTS...
-        //This WILL have adverse side effects due functions using parse_expr() for argument values
-        //Adding this would cause multiple arguments to potentially read when they shouldn't be
-        //This would not be a useful solution, maybe a reimplementation of parse_multi_val() would
-        //assist this endeavor to add tuple functionality outside of assignment statements.
-        expect()
-    }*///else do nothing
+    }//else do nothing
 }
 
 function parse_op(){
@@ -1222,7 +1594,11 @@ function parse_format_function(){
             //Getting the content of the string that the function is being called on
             type = token.type;
             string_content = program;
-            parse_string();
+            var isMulti = multi_str_comment_check();
+            if(isMulti)
+                parse_multi_str_comment();
+            else
+                parse_string();
             string_content = string_content.substring(1, string_content.indexOf(program)-1);
         }        
         expect("PERIOD");
@@ -1459,15 +1835,13 @@ function named_format(potentialPairs, namedPara){
 function parse_comment(){
     expect("HASH_TAG");
     var token = peek();
-    while(token.type !== "END_OF_LINE"){
+    while(token.type !== "END_OF_LINE" && token.type !== "END_OF_FILE"){
         expect(token.type);
         token = peek();
     }
 }
 
 //Built-in Functions
-//TO DO
-//Will we have to worry about the typing of functions, modules, etc. ?
 function parse_input_stmt(){
     expect("INPUT");
     expect("LPAREN");
@@ -1480,43 +1854,26 @@ function parse_input_stmt(){
     }
 }
 
-//TO DO
-//Account for the inclusion of functions in the list of possible tokens read
 function parse_print_stmt(){
     expect("PRINT");
     expect("LPAREN");
     var token = peek();
-    switch(token.type){
-        case "RPAREN": expect("RPAREN");
-            break;
-        case "ID":
-        case "NUMBER":
-        case "FLOAT":
-        case "TRUE":
-        case "FALSE":
-        case "LPAREN":
-        case "LBRACKET": 
-        case "LBRACE": 
-        case "APOSTROPHE": 
-        case "QUOTE":
-            parse_print_multi_val();
-            token = peek();
-            if(token.type === "RPAREN"){//TO DO: Can reduce this to just use expect("RPAREN"), instead of this if statement
-                expect("RPAREN");
-            }else{
-                syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
-            }
-            break;
+    if(token.type === "RPAREN"){
+        expect("RPAREN");
+    }else{
+        parse_print_multi_val();
+        token = peek();
+        if(token.type === "RPAREN"){
+            expect("RPAREN");
+        }else{
+            syntax_error("ERROR_MISSING_RIGHT_PARENTHESIS");
+        }
     }
 }
 
-//TO DO
-//Need to address implementation for String type eventually.
-//Currently this will account for every way to print with single input, or multiple inputs for the print function
 function parse_print_multi_val(){
     var token = peek();
-    var valid_types = ["ID", "NUMBER", "FLOAT", "TRUE", "FALSE", "LPAREN", "LBRACKET", "LBRACE", "APOSTROPHE", "QUOTE"];
-    if(valid_types.includes(token.type)){
+    if(token.type !== "RPAREN" && token.type !== "END_OF_FILE"){
         parse_expr();
         var token = peek();
         if(token.type === "COMMA"){
@@ -1596,38 +1953,7 @@ function parse_oct_function(){
 function parse_ord_function(){
     expect("ORD");
     expect("LPAREN");
-    
-    var token = peek();
-    
-    // case totken = ID
-    switch(token.type){
-        case "QUOTE":
-            expect("QUOTE");
-            token = peek();
-            if(token.type === "QUOTE")
-                syntax_error();         // INSERT SYNTAX ERROR
-            if(token.length === 1){
-                program = program.slice(token.length);
-                expect("QUOTE");
-            }else{
-                syntax_error();          // INSERT SYNTAX ERROR
-            }
-            break;
-        case "APOSTROPHE":
-            expect("APOSTROPHE");
-            token = peek();
-            if(token.type === "APOSTROPHE"){
-                syntax_error();         // INSERT SYNTAX ERROR
-            } 
-            if(token.length === 1){
-                program = program.slice(token.length);
-                expect("APOSTROPHE");
-            }
-            break;
-        default:
-            syntax_error();             // INSERT SYNTAX ERROR
-            break;
-    }
+    parse_expr();
     expect("RPAREN");
 }
 
@@ -1645,15 +1971,51 @@ function parse_str_function(){
 
 
 function parse_int_function(){
+    expect("INT");
+    expect("LPAREN");
+    var token = peek();
     
+    if(token.type !== "RPAREN"){
+        parse_expr();
+        token = peek();
+        if(token.type === "COMMA"){
+            expect("COMMA");
+            parse_expr();
+        }
+    }
+    expect("RPAREN");
 }
 
 function parse_max_function(){
+    expect("MAX");
+    expect("LPAREN");
+    parse_expr();
+    expect("COMMA");
+    parse_expr();
+    var token = peek();
     
+    while(token.type !== "RPAREN" && token.type !== "END_OF_FILE"){
+        expect("COMMA");
+        parse_expr();
+        token = peek();
+    }
+    expect("RPAREN");
 }
 
 function parse_min_function(){
+    expect("MIN");
+    expect("LPAREN");
+    parse_expr();
+    expect("COMMA");
+    parse_expr();
+    var token = peek();
     
+    while(token.type !== "RPAREN" && token.type !== "END_OF_FILE"){
+        expect("COMMA");
+        parse_expr();
+        token = peek();
+    }
+    expect("RPAREN");
 }
 
 function parse_type_function(){
@@ -1876,61 +2238,64 @@ function parse_randint_function(){
 }
 
 function syntax_error(errorType){
-    testingResult = false;
-    program = "";
-    //document.write("<br>" + testingResult + "<br>");
-    if (errorType === "UNKNOWN_SYMBOL"){
-        alert("Program contains unknown symbols!");
-        //exit();
-    }else if (errorType === "INVALID_STATEMENT"){
-        alert("Invalid statement!");
-        //exit();
-    }else if (errorType === "INDENTATION_ERROR"){
-        alert("Indentation error detected!");
-        //exit();
-    }else if (errorType === "INVALID_COND_OPERATOR"){
-        alert("Invalid conditional operator!");
-        //exit();
-    }else if (errorType === "INVALID_COMP_OPERATOR"){
-        alert("Invalid comparison operator!");
-        //exit();
-    }else if (errorType === "INVALID_LINK"){
-        alert("Invalid comparison link!");
-        //exit();
-    }else if (errorType === "INVALID_RANGE"){
-        alert("Invalid ranged specified!");
-        //exit();
-    }else if (errorType === "INVALID_RHS"){
-        alert("Invalid right-hand side value/variable");
-        //exit();
-    }else if (errorType === "INVALID_ASSIGNMENT"){
-        alert("Invalid assignment operation!");
-        //exit();
-    }else if (errorType === "INVALID_ASSIGN_OPERATOR"){
-        alert("Invalid assignment operator!");
-        //exit();
-    }else if (errorType === "INVALID_PRIMARY"){
-        alert("Invalid primary type!");
-        //exit();
-    }else if (errorType === "NON_FORMAT_ERROR"){
-        alert("Only format() allowed!");
-        //exit();
-    }else if (errorType === "INVALID_OPERATOR"){
-        alert("Invalid arithmetic operator!");
-        //exit();
-    }else if (errorType === "ERROR_MISSING_RIGHT_PARENTHESIS"){
-        alert("Expecting right parenthesis!");
-        //exit();
-    }else if (errorType === "ERROR_FORMAT_VIOLATION"){
-        alert("format() violation detected!");
-        //exit();
-    }else if (errorType === "INVALID_INPUT"){
-        alert("Invalid input!");
-        //exit();
-    }else{
-        //document.write("Unspecified Error<br>");
-        alert("Unspecified Error");
-        //exit();
+    //document.write("<br>" + program + "<br>");
+    if(testingResult){
+        testingResult = false;
+        program = "";
+        
+        if (errorType === "UNKNOWN_SYMBOL"){
+            errorResult = "Program contains unknown symbols!";
+            //exit();
+        }else if (errorType === "INVALID_STATEMENT"){
+            errorResult = "Invalid statement!";
+            //exit();
+        }else if (errorType === "INDENTATION_ERROR"){
+            errorResult = "Indentation error detected!";
+            //exit();
+        }else if (errorType === "INVALID_COND_OPERATOR"){
+            errorResult = "Invalid conditional operator!";
+            //exit();
+        }else if (errorType === "INVALID_COMP_OPERATOR"){
+            errorResult = "Invalid comparison operator!";
+            //exit();
+        }else if (errorType === "INVALID_LINK"){
+            errorResult = "Invalid comparison link!";
+            //exit();
+        }else if (errorType === "INVALID_RANGE"){
+            errorResult = "Invalid ranged specified!";
+            //exit();
+        }else if (errorType === "INVALID_RHS"){
+            errorResult = "Invalid right-hand side value/variable";
+            //exit();
+        }else if (errorType === "INVALID_ASSIGNMENT"){
+            errorResult = "Invalid assignment operation!";
+            //exit();
+        }else if (errorType === "INVALID_ASSIGN_OPERATOR"){
+            errorResult = "Invalid assignment operator!";
+            //exit();
+        }else if (errorType === "INVALID_PRIMARY"){
+            errorResult = "Invalid primary type!";
+            //exit();
+        }else if (errorType === "NON_FORMAT_ERROR"){
+            errorResult = "Only format() allowed!";
+            //exit();
+        }else if (errorType === "INVALID_OPERATOR"){
+            errorResult = "Invalid arithmetic operator!";
+            //exit();
+        }else if (errorType === "ERROR_MISSING_RIGHT_PARENTHESIS"){
+            errorResult = "Expecting right parenthesis!";
+            //exit();
+        }else if (errorType === "ERROR_FORMAT_VIOLATION"){
+            errorResult = "format() violation detected!";
+            //exit();
+        }else if (errorType === "INVALID_INPUT"){
+            errorResult = "Invalid input!";
+            //exit();
+        }else{
+            //document.write("Unspecified Error<br>");
+            errorResult = "Unspecified Error";
+            //exit();
+        }
     }
     
 }

@@ -17,7 +17,7 @@ function main(){
     output = "Input Code: " + input + "\n";
     
  
-    output += "Lexer:  \n";
+    //output += "Lexer:  \n";
 
     var tmpInput = input;
     while(tmpInput.length > 0){
@@ -29,16 +29,31 @@ function main(){
     
     document.getElementById("outputField").value = output;
     
-    output += "\nParser:  \n" ;
-    
+    //output += "\nParser:  \n" ;
+    tmpInput = input;
+    //parse_begin_program(tmpInput);
+    //var parseResult = test(tmpInput);
+    //output += "\n\n" + parseResult[1] + "\n\n"
+    //document.getElementById("outputField").value += val[0] + "\n\n" + val[1];
     lexer_cleanUp();
-    output += "\nRuntime:  \n";
-
-    var instrList = new Array();
-    instrList = create_instructions(input);
-    for(var x = 0; x < instrList.length; x++){
-        output += ((x+1) + ") " + instrList[x].instr + " " + instrList[x].result + "\n");
-    }
+    
+    
+    
+   // if(parseResult[0]){
+        output += "\nRuntime:  \n";
+        var instrList = new Array();
+        instrList = create_instructions(input);
+        for(var x = 0; x < instrList.length; x++){
+            output += ((x+1) + ") " + instrList[x].instr + " " + instrList[x].result + "\n");
+        }
+  //  }
+    
+    
+    
+    
+    
+   
+   //test_indent(input);
     
     document.getElementById("outputField").value = output;
 }
