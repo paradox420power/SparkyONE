@@ -5,8 +5,8 @@ var varList = new Array(); //list of declared variables
 var cmdCount = 1; //this is the instruction on, (instr); or (instr)\n should increment this value
 
 var reservedWords = ["abs", "and", "as", "ascii", "assert", "bin", "bool", "break", "ceil", "chr", "class", "cos", 
-    "continue", "def", "del", "elif", "else", "except", "float", "floor", "finally", "for", "from", "global", "hex",
-    "if", "import", "in", "input", "int", "is", "lambda", "len", "max", "min", "my_range", "nonlocal", "not", "oct", "or", "ord", "pass", "print",
+    "continue", "def", "del", "e", "elif", "else", "except", "float", "floor", "finally", "for", "from", "global", "hex",
+    "if", "import", "in", "input", "int", "is", "lambda", "len", "max", "min", "my_range", "nonlocal", "not", "oct", "or", "ord", "pass", "print", "pi",
     "raise", "randint", "random", "range", "return", "round", "seed", "sin", "str", "sqrt", "tan", "try", "type", "while", "with", "xrange", "yield", "format", "input"];
 var userDefFunc = [];
 var currentScope = "global";
@@ -1701,10 +1701,11 @@ function resolvePrint(val2){
             }
             toResolve = []; //reset toResolve
         }
-        toPrint += " ";
+        if(x+1 < val2.length)
+         toPrint += " ";
     }
     
-    pushInstr("The final string print to Screen is \"", toPrint + " \"", cmdCount, 0, 0);
+    pushInstr("The final string print to Screen is \"" + toPrint + "\"", "", cmdCount, 0, 0);
     
     var resolution = {
         result: toPrint + "",
@@ -2118,6 +2119,105 @@ function resolve_sin(token)
     pushInstr("sin(" + token[0].id + ") ", "resolves to " +newVal, cmdCount, 0, 0);
     return resolution;   
 }
+function resolve_tan(token)
+{
+    var tokenVal = convertTokenToValue(token).value;
+    
+    var newVal = Math.tan(tokenVal);
+    
+    var resolution = {
+        result: newVal + "",
+        type: "FLOAT"
+    };    
+    
+    pushInstr("tan(" + token[0].id + ") ", "resolves to " +newVal, cmdCount, 0, 0);
+    return resolution;   
+}
+
+function resolve_pi(token)
+{
+    var newVal = Math.PI;
+    var resolution = {
+            result: newVal + "",
+            type: "FLOAT"
+        };
+        pushInstr("_pi_", "resolves to " +newVal, cmdCount, 0, 0);
+        return resolution;
+}
+
+function resolve_e(token)
+{
+    var newVal = Math.E;
+    var resolution = {
+            result: newVal + "",
+            type: "FLOAT"
+        };
+        pushInstr("_e_", "resolves to " +newVal, cmdCount, 0, 0);
+        return resolution;
+}
+
+
+
+function resolve_random(token)
+{
+    var newVal = Math.random();
+    var resolution = {
+            result: newVal + "",
+            type: "FLOAT"
+        };
+    pushInstr("random", "resolves to " +newVal, cmdCount, 0, 0);
+    return resolution;  
+}
+
+function additional_import(token)
+{
+    pushInstr("import(" + token[0].id + ") ", "resolves to " +newVal, cmdCount, 0, 0);
+}
+
+
+function resolve_round(token)
+{   
+    var tokenVal = convertTokenToValue(token).value;
+    var newVal = Math.round(tokenVal);
+    var resolution = {
+            result: newVal + "",
+            type: "INT"
+        };
+   pushInstr("round(" + token[0].id + ") ", "resolves to " +newVal, cmdCount, 0, 0);
+    return resolution; 
+}
+
+function resolve_int(token)
+{
+    var tokenVal = convertTokenToValue(token).value;
+
+
+         var newVal = parseInt(tokenVal);
+        
+        var resolution = {
+            result: newVal + "",
+            type: "INT"
+        };
+        pushInstr("int(" + token[0].id + ") ", "resolves to " + newVal + "", cmdCount, 0, 0);
+        
+        return resolution;
+    }
+
+function resolve_randint(token)
+{
+
+    min = convertTokenToValue(token).value;
+    max = convertTokenToValue(token).value;
+    newVal= Math.random() * (max - min) + min;
+
+
+    var resolution = {
+            result: newVal + "",
+            type: "INT"
+        };
+   pushInstr("randint(" + token[0].id + ") ", "resolves to " +newVal, cmdCount, 0, 0);
+    return resolution; 
+}
 
 function resolve_built_ins(opToken, tokenList)
 {
@@ -2172,6 +2272,42 @@ function resolve_built_ins(opToken, tokenList)
         case "sin":
             res = resolve_sin(tokenList);
             break;
+            
+        case "tan":
+            res = resolve_tan(tokenList);
+            break;
+        case "pi":
+            res = resolve_pi(tokenList);
+            break;
+        case "e":
+            res = resolve_e(tokenList);
+            break;
+
+        case "random":
+            res = resolve_random(tokenList);
+            break;
+        case "int":
+            res = resolve_int(tokenList);
+            break;
+        case "key":
+            res = resolve_key(tokenList);
+            break;
+        case "max":
+            res = resolve_max(tokenList);
+            break;
+        case "min":
+            res = resolve_min(tokenList);
+            break;
+        case "round":
+            res = resolve_round(tokenList);
+            break;
+        case "seed":
+            res = resolve_seed(tokenList);
+            break;
+        case "randint":
+            res = resolve_randint(tokenList);
+            break;
+            
         case "return":
             res = resolveReturnStatement(tokenList);
             break;

@@ -29,11 +29,11 @@ function main(){
     
     document.getElementById("outputField").value = output;
     
-    //output += "\nParser:  \n" ;
+    output += "\nParser:  \n" ;
     tmpInput = input;
-    //parse_begin_program(tmpInput);
+    parse_begin_program(tmpInput);
     var parseResult = test(tmpInput);
-    output += "\n\n" + parseResult[1] + "\n\n"
+    //output += parseResult[1] + "\n\n"
     //document.getElementById("outputField").value += val[0] + "\n\n" + val[1];
     lexer_cleanUp();
     
